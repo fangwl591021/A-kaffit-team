@@ -1,32 +1,38 @@
-# A-Kaffit Team 商務中心
+# A-KAFFIT TEAM 商脈中心
 
-以手機為優先的商務人脈儀表板，部署於 Cloudflare Workers。
+以 `mirabeauty` 為功能基線建立的康立獨立版 LINE 會員入口，部署於 Cloudflare Workers。
 
-## MVP 範圍
+## 已包含功能
 
-- 今日商脈指數與關鍵數據
-- 名片收藏、人脈配對、行事曆、附近商家、活動中心、商脈錢包
-- 人脈、洞察與個人資料分頁
-- 首次使用只建立姓名、行動電話、生日資料，暫不設登入驗證
-- 個人資料暫存於瀏覽器 `localStorage`
-- 不包含 AI 內容生成或 AI 穿戴功能
+- LINE Login 會員註冊與登入
+- 單層推薦關係、邀請連結與分享 QR
+- 點數錢包、點數明細與動態 QR
+- 課程活動、實體／線上簽到
+- 每日輪播觀看與簽到贈點
+- 個人電子名片、名片收藏、OCR 與五大標籤分析
+- 星座、生命靈數綜合內容
+- CRM、點數規則、課程、媒體庫與圖文選單管理
 
-## 開發
+## A-KAFFIT 環境
 
-```powershell
-npm.cmd install
-npm.cmd run dev
+- Worker：`akaffit-team`
+- 正式網址：`https://akaffit-team.fangwl591021.workers.dev/`
+- LIFF ID：`2007221311-QPueR5eF`
+- LINE Login Channel ID：`2007221311`
+- D1：`akaffit_team_crm`（建立後需將 ID 寫入 `wrangler.jsonc`）
+- R2：`akaffit-team-media`
+
+## 初始化與部署
+
+```bash
+npm ci
+npx wrangler d1 create akaffit_team_crm
+npx wrangler r2 bucket create akaffit-team-media
+# 將 D1 database_id 填入 wrangler.jsonc
+npx wrangler d1 migrations apply akaffit_team_crm --remote
+npm test
+npm run check
+npx wrangler deploy
 ```
 
-## 驗證
-
-```powershell
-npm.cmd test
-npm.cmd run check
-```
-
-## 部署
-
-```powershell
-npm.cmd run deploy
-```
+正式環境另需設定 `SESSION_SIGNING_SECRET`，並視需要設定 `ADMIN_LINE_SUBJECTS`、`WALLET_SCANNER_API_KEY`、OpenAI 與 LINE Messaging API 參數。秘密值不得提交至 GitHub。

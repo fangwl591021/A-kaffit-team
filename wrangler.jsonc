@@ -1,17 +1,37 @@
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "akaffit-team",
   "main": "src/index.js",
-  "compatibility_date": "2026-07-28",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2026-07-17",
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/v1/*", "/i/*", "/w/*", "/c/*", "/admin", "/admin/sso", "/assets/checkin-template/*"]
   },
-  "observability": {
-    "enabled": true,
-    "head_sampling_rate": 1
-  }
+  "vars": {
+    "LIFF_ID": "2007221311-QPueR5eF",
+    "CHECKIN_LIFF_ID": "2007221311-QPueR5eF",
+    "LINE_LOGIN_CHANNEL_ID": "2007221311"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "akaffit_team_crm",
+      "database_id": "62f1b387-b6b7-40a3-9c57-97c5c056428a",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "services": [
+    {
+      "binding": "MLM_WORKER",
+      "service": "mlm"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "akaffit-team-media"
+    }
+  ]
 }
