@@ -10,10 +10,13 @@ test("public site uses the logo-derived A-kaffit rust theme", () => {
 
   assert.match(css, /--ak-primary:#b95121/);
   assert.match(css, /\.ak-home-banner\{[^}]*var\(--ak-primary\)[^}]*var\(--ak-deep\)/);
+  assert.match(css, /body:has\(\.ak-dashboard\)\{[^}]*overflow:hidden/);
+  assert.match(css, /\.ak-dashboard\{[^}]*height:calc\(100svh - 112px\)[^}]*overflow:hidden/);
+  assert.match(css, /\.ak-home-content\{[^}]*height:100%;overflow-y:auto;overscroll-behavior:contain/);
   assert.match(css, /\.ak-bottom-nav\{[^}]*var\(--ak-primary\)[^}]*var\(--ak-deep\)/);
   assert.match(css, /\.ak-feature-grid\{[^}]*position:sticky;top:0;z-index:18/);
   assert.match(css, /\.ak-feature-grid button\{[^}]*color:var\(--ak-primary\)/);
   assert.match(css, /\.ak-official-site\{[^}]*border-top:6px solid var\(--ak-soft\)/);
   assert.doesNotMatch(css, /#003f2d|#002d21|#24e56f|#004932|#003b2c/);
-  assert.match(html, /\/akaffit-20260729-10\.css/);
+  assert.match(html, /\/akaffit-20260729-11\.css/);
 });

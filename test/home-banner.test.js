@@ -23,6 +23,6 @@ test("home reuses the compact aiweb member banner", () => {
   assert.match(home, /id="copyInvite"/);
   assert.doesNotMatch(home, /商脈指數/);
   assert.doesNotMatch(home, /ak-hero|ak-index-card|ak-meter/);
-  assert.match(css, /\.ak-home-content\{padding:14px 18px 30px\}/);
+  assert.match(css, /\.ak-home-content\{[^}]*height:100%;overflow-y:auto/);
   assert.doesNotMatch(css, /\.ak-hero|\.ak-index-card|\.ak-meter/);
 });
