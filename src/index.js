@@ -681,7 +681,7 @@ async function officialAkaffitSite() {
       "x-content-type-options": "nosniff",
     },
   });
-  const hideContactStyle = ".footer_info,.floating-icon,a[href*='contact'],a[href^='tel:'],a[href^='mailto:']{display:none!important}";
+  const hideContactStyle = "body>header,.footer_info,.floating-icon,a[href*='contact'],a[href^='tel:'],a[href^='mailto:']{display:none!important}";
   return new HTMLRewriter()
     .on("head", {
       element(element) {
@@ -693,6 +693,7 @@ async function officialAkaffitSite() {
         if ((element.getAttribute("http-equiv") || "").toLowerCase() === "content-security-policy") element.remove();
       },
     })
+    .on("body > header", { element(element) { element.setAttribute("hidden", "").setAttribute("style", "display:none!important"); } })
     .on(".footer_info", { element(element) { element.setAttribute("hidden", "").setAttribute("style", "display:none!important"); } })
     .on(".floating-icon", { element(element) { element.setAttribute("hidden", "").setAttribute("style", "display:none!important"); } })
     .on("a", {

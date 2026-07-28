@@ -12,6 +12,8 @@ test("official A’kaffit homepage is streamed through a fixed-origin privacy-fi
   assert.match(worker, /<base href="\$\{AKAFFIT_OFFICIAL_URL\}"/);
   assert.match(worker, /\.footer_info/);
   assert.match(worker, /\.floating-icon/);
+  assert.match(worker, /body>header/);
+  assert.match(worker, /\.on\("body > header"/);
   assert.match(worker, /mailto:\|tel:/);
   assert.match(worker, /url\.pathname === "\/akaffit-official"/);
   assert.match(config, /"\/akaffit-official"/);

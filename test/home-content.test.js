@@ -12,7 +12,9 @@ test("home exposes daily check-in and the directly imported official site", () =
   assert.match(home, /class="ak-official-import-frame"/);
   assert.match(home, /src="\/akaffit-official"/);
   assert.match(home, /data-content-view="youtube">YouTube/);
+  assert.match(home, /data-content-view="facebook">Facebook/);
   assert.match(home, /data-content-view="official">官方網站/);
+  assert.match(home, /data-content-panel="facebook"/);
   assert.match(home, /data-content-panel="youtube"/);
   assert.match(home, /loadAkaffitYoutube\(\)/);
   assert.doesNotMatch(home, /\/v1\/blog\/posts\?limit=6|A-KAFFIT JOURNAL|ak-brand-story|ak-craft-section/);
