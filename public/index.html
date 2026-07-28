@@ -60,7 +60,7 @@
             </div>
 
             <div class="tool-grid">
-              <button class="tool-card" type="button" data-tool="cards">
+              <button class="tool-card" type="button" data-go="cards">
                 <span class="tool-card__icon"><span data-icon="bookmark"></span></span><strong>名片收藏</strong><small>集中管理商務聯絡人</small>
               </button>
               <button class="tool-card" type="button" data-tool="matches">
@@ -89,6 +89,34 @@
               </button>
             </div>
           </div>
+        </section>
+
+        <section class="screen content-screen cards-screen" data-screen="cards" aria-label="名片收藏">
+          <div class="page-topline">
+            <button class="back-button" type="button" data-go="home" aria-label="回首頁">‹</button>
+            <span>名片收藏</span>
+            <button class="primary-icon-button primary-icon-button--small" type="button" data-action="add-contact" aria-label="新增名片">＋</button>
+          </div>
+          <div class="page-header">
+            <p>BUSINESS CARD BOOK</p>
+            <h2>我的名片收藏</h2>
+            <span>收藏、搜尋並追蹤每一段重要商務關係。</span>
+          </div>
+          <div class="card-summary">
+            <article><small>全部名片</small><strong id="cardTotal">0</strong></article>
+            <article><small>已收藏</small><strong id="cardFavoriteTotal">0</strong></article>
+            <article><small>待追蹤</small><strong id="cardFollowTotal">0</strong></article>
+          </div>
+          <div class="search-row card-search-row">
+            <label><span data-icon="search"></span><input id="cardSearch" type="search" placeholder="搜尋名片姓名、公司或專長" /></label>
+          </div>
+          <div class="filter-chips card-filter-chips" role="group" aria-label="名片分類">
+            <button class="active" type="button" data-card-filter="all">全部</button>
+            <button type="button" data-card-filter="favorite">已收藏</button>
+            <button type="button" data-card-filter="follow">待追蹤</button>
+            <button type="button" data-card-filter="partner">合作夥伴</button>
+          </div>
+          <div class="business-card-list" id="cardCollection"></div>
         </section>
 
         <section class="screen content-screen" data-screen="network" aria-label="人脈">
@@ -186,7 +214,14 @@
         <label>姓名<input name="name" maxlength="20" required /></label>
         <label>公司／品牌<input name="company" maxlength="40" required /></label>
         <label>專長<input name="skill" maxlength="30" placeholder="例如：品牌設計" required /></label>
-        <button class="primary-button" type="submit">加入人脈</button>
+        <label>行動電話<input name="phone" type="tel" inputmode="tel" maxlength="20" placeholder="09xx xxx xxx" required /></label>
+        <label>關係分類
+          <select name="category">
+            <option value="follow">待追蹤</option>
+            <option value="partner">合作夥伴</option>
+          </select>
+        </label>
+        <button class="primary-button" type="submit" id="contactSubmitButton">加入人脈</button>
       </form>
     </dialog>
 
