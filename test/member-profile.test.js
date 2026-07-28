@@ -19,6 +19,9 @@ test("member registration UI includes logo, name, numeric birthday, and repeatab
   assert.match(app, /id="addSocialLink"/);
   assert.match(app, /socialLinks/);
   assert.doesNotMatch(app, /class="ak-brandmark"/);
+  const css = fs.readFileSync(new URL("../public/akaffit.css", import.meta.url), "utf8");
+  assert.match(css, /\.member-logo-preview\{[^}]*border-radius:50%[^}]*background:var\(--ak-soft\)[^}]*color:var\(--ak-primary\)/);
+  assert.doesNotMatch(css, /\.member-logo-preview\{[^}]*border-radius:24px/);
 });
 
 test("five-tag UI supports explicit retry and automatic refresh", () => {
