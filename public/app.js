@@ -39,10 +39,10 @@ const toolContent = {
 };
 
 const defaultContacts = [
-  { name:"林雅婷", company:"禾光品牌顧問", skill:"品牌策略", category:"partner", status:"合作夥伴" },
-  { name:"陳柏維", company:"初見數位", skill:"社群行銷", category:"follow", status:"待追蹤" },
-  { name:"王思涵", company:"拾光空間", skill:"空間企劃", category:"partner", status:"合作夥伴" },
-  { name:"張育誠", company:"穩健財務", skill:"企業顧問", category:"follow", status:"待追蹤" },
+  { id:"card-lin", name:"林雅婷", company:"禾光品牌顧問", skill:"品牌策略", phone:"0912 345 678", category:"partner", status:"合作夥伴", favorite:true },
+  { id:"card-chen", name:"陳柏維", company:"初見數位", skill:"社群行銷", phone:"0922 468 135", category:"follow", status:"待追蹤", favorite:false },
+  { id:"card-wang", name:"王思涵", company:"拾光空間", skill:"空間企劃", phone:"0933 579 246", category:"partner", status:"合作夥伴", favorite:true },
+  { id:"card-chang", name:"張育誠", company:"穩健財務", skill:"企業顧問", phone:"0955 681 357", category:"follow", status:"待追蹤", favorite:false },
 ];
 
 function load(key, fallback) {
@@ -50,10 +50,21 @@ function load(key, fallback) {
   catch { return fallback; }
 }
 
+function normalizeContacts(contacts) {
+  return contacts.map((contact) => ({
+    ...contact,
+    id: contact.id || crypto.randomUUID(),
+    phone: contact.phone || "",
+    favorite: Boolean(contact.favorite),
+  }));
+}
+
 const state = {
   profile: load(PROFILE_KEY, null),
-  contacts: load(CONTACTS_KEY, defaultContacts),
+  contacts: normalizeContacts(load(CONTACTS_KEY, defaultContacts)),
   filter: "all",
+  cardFilter: "all",
+  editingId: null,
 };
 
 function save(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
@@ -61,6 +72,10 @@ function escapeHtml(value) {
   const div = document.createElement("div");
   div.textContent = value;
   return div.innerHTML;
+}
+
+function phoneHref(value) {
+  return String(value).replace(/[^+\d]/g, "");
 }
 
 function renderIcons(root = document) {
@@ -88,6 +103,7 @@ function updateProfileUI() {
 function showScreen(name) {
   document.querySelectorAll(".screen").forEach((screen) => screen.classList.toggle("active", screen.dataset.screen === name));
   document.querySelectorAll(".bottom-nav [data-go]").forEach((button) => button.classList.toggle("active", button.dataset.go === name));
+  if (name === "cards") renderCards();
   window.scrollTo({ top:0, behavior:"smooth" });
 }
 
@@ -111,6 +127,24 @@ function openOnboarding() {
     form.elements.birthday.value = state.profile.birthday || "";
   }
   document.querySelector("#onboardingDialog").showModal();
+}
+
+function openContactDialog(id = null) {
+  const dialog = document.querySelector("#contactDialog");
+  const form = document.querySelector("#contactForm");
+  state.editingId = id;
+  form.reset();
+  const contact = state.contacts.find((item) => item.id === id);
+  dialog.querySelector("h2").textContent = contact ? "編輯名片" : "新增名片";
+  document.querySelector("#contactSubmitButton").textContent = contact ? "儲存變更" : "加入人脈";
+  if (contact) {
+    form.elements.name.value = contact.name;
+    form.elements.company.value = contact.company;
+    form.elements.skill.value = contact.skill;
+    form.elements.phone.value = contact.phone;
+    form.elements.category.value = contact.category;
+  }
+  dialog.showModal();
 }
 
 function openTool(name) {
@@ -143,6 +177,48 @@ function renderContacts() {
     </article>`).join("");
 }
 
+function renderCards() {
+  const search = document.querySelector("#cardSearch");
+  if (!search) return;
+  const query = search.value.trim().toLowerCase();
+  document.querySelector("#cardTotal").textContent = state.contacts.length;
+  document.querySelector("#cardFavoriteTotal").textContent = state.contacts.filter((contact) => contact.favorite).length;
+  document.querySelector("#cardFollowTotal").textContent = state.contacts.filter((contact) => contact.category === "follow").length;
+  const cards = state.contacts.filter((contact) => {
+    const matchesFilter =
+      state.cardFilter === "all" ||
+      (state.cardFilter === "favorite" && contact.favorite) ||
+      contact.category === state.cardFilter;
+    return matchesFilter && `${contact.name} ${contact.company} ${contact.skill}`.toLowerCase().includes(query);
+  });
+  const collection = document.querySelector("#cardCollection");
+  if (!cards.length) {
+    collection.innerHTML = '<div class="empty-state">目前沒有符合條件的名片</div>';
+    return;
+  }
+  collection.innerHTML = cards.map((contact) => `
+    <article class="business-card" data-card-id="${escapeHtml(contact.id)}">
+      <div class="business-card__accent"></div>
+      <div class="business-card__top">
+        <span class="business-card__avatar">${escapeHtml(contact.name.slice(0, 1))}</span>
+        <button class="favorite-button ${contact.favorite ? "active" : ""}" type="button" data-action="favorite-card" aria-label="${contact.favorite ? "取消收藏" : "加入收藏"}">${contact.favorite ? "★" : "☆"}</button>
+      </div>
+      <p class="business-card__company">${escapeHtml(contact.company)}</p>
+      <h3>${escapeHtml(contact.name)}</h3>
+      <p class="business-card__skill">${escapeHtml(contact.skill)}</p>
+      <div class="business-card__meta">
+        <span class="${contact.category === "follow" ? "warning" : ""}">${escapeHtml(contact.status)}</span>
+        <small>${escapeHtml(contact.phone || "尚未設定電話")}</small>
+      </div>
+      <div class="business-card__actions">
+        ${contact.phone ? `<a href="tel:${phoneHref(contact.phone)}">撥打</a>` : ""}
+        <button type="button" data-action="edit-card">編輯</button>
+        <button class="danger" type="button" data-action="delete-card">刪除</button>
+      </div>
+    </article>
+  `).join("");
+}
+
 document.addEventListener("click", (event) => {
   const go = event.target.closest("[data-go]");
   if (go) showScreen(go.dataset.go);
@@ -157,14 +233,31 @@ document.addEventListener("click", (event) => {
   if (action === "close-dialog") closeOpenDialog();
   if (action === "skip-onboarding") closeOpenDialog();
   if (action === "edit-profile") openOnboarding();
-  if (action === "add-contact") document.querySelector("#contactDialog").showModal();
+  if (action === "add-contact") openContactDialog();
+  const cardId = event.target.closest("[data-card-id]")?.dataset.cardId;
+  if (action === "favorite-card" && cardId) {
+    const contact = state.contacts.find((item) => item.id === cardId);
+    contact.favorite = !contact.favorite;
+    save(CONTACTS_KEY, state.contacts);
+    renderCards();
+    showToast(contact.favorite ? "已加入收藏" : "已取消收藏");
+  }
+  if (action === "edit-card" && cardId) openContactDialog(cardId);
+  if (action === "delete-card" && cardId && window.confirm("確定要刪除這張名片嗎？")) {
+    state.contacts = state.contacts.filter((item) => item.id !== cardId);
+    save(CONTACTS_KEY, state.contacts);
+    renderContacts();
+    renderCards();
+    showToast("名片已刪除");
+  }
   if (action === "clear-data") {
     localStorage.removeItem(PROFILE_KEY);
     localStorage.removeItem(CONTACTS_KEY);
     state.profile = null;
-    state.contacts = [...defaultContacts];
+    state.contacts = normalizeContacts([...defaultContacts]);
     updateProfileUI();
     renderContacts();
+    renderCards();
     closeOpenDialog();
     showToast("本機資料已清除");
   }
@@ -194,21 +287,37 @@ document.querySelector("#onboardingForm").addEventListener("submit", (event) => 
 document.querySelector("#contactForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const data = new FormData(event.currentTarget);
-  state.contacts.unshift({
+  const category = String(data.get("category"));
+  const values = {
     name:String(data.get("name")).trim(),
     company:String(data.get("company")).trim(),
     skill:String(data.get("skill")).trim(),
-    category:"follow",
-    status:"待追蹤",
-  });
+    phone:String(data.get("phone")).trim(),
+    category,
+    status:category === "partner" ? "合作夥伴" : "待追蹤",
+  };
+  if (state.editingId) {
+    const contact = state.contacts.find((item) => item.id === state.editingId);
+    Object.assign(contact, values);
+  } else {
+    state.contacts.unshift({ id:crypto.randomUUID(), favorite:false, ...values });
+  }
   save(CONTACTS_KEY, state.contacts);
   event.currentTarget.reset();
   renderContacts();
+  renderCards();
   closeOpenDialog();
-  showToast("名片已加入人脈");
+  showToast(state.editingId ? "名片已更新" : "名片已加入人脈");
+  state.editingId = null;
 });
 
 document.querySelector("#contactSearch").addEventListener("input", renderContacts);
+document.querySelector("#cardSearch").addEventListener("input", renderCards);
+document.querySelectorAll("[data-card-filter]").forEach((button) => button.addEventListener("click", () => {
+  state.cardFilter = button.dataset.cardFilter;
+  document.querySelectorAll("[data-card-filter]").forEach((item) => item.classList.toggle("active", item === button));
+  renderCards();
+}));
 document.querySelectorAll("[data-filter]").forEach((button) => button.addEventListener("click", () => {
   state.filter = button.dataset.filter;
   document.querySelectorAll("[data-filter]").forEach((item) => item.classList.toggle("active", item === button));
@@ -222,6 +331,7 @@ renderIcons();
 setToday();
 updateProfileUI();
 renderContacts();
+renderCards();
 if (!state.profile && !sessionStorage.getItem("akaffit.onboarding.dismissed")) {
   setTimeout(() => document.querySelector("#onboardingDialog").showModal(), 450);
 }
