@@ -1,4 +1,4 @@
-import test from "node:test";
+﻿import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
@@ -10,6 +10,9 @@ test("home exposes daily check-in and journal posts", () => {
   assert.match(home, /data-home-action="daily"/);
   assert.match(home, /\/v1\/blog\/posts\?limit=6/);
   assert.match(home, /A-KAFFIT JOURNAL/);
+  assert.doesNotMatch(home, />更多功能</);
+  const features = home.slice(home.indexOf('<div class="ak-feature-grid">'), home.indexOf('</div>', home.indexOf('<div class="ak-feature-grid">')));
+  assert.equal((features.match(/<button data-home-action=/g) || []).length, 8);
 });
 
 test("admin exposes check-in templates and blog management", () => {

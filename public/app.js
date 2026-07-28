@@ -847,7 +847,6 @@ async function home() {
         <button data-home-action="calendar"><i>▦</i><span>個人行事曆</span></button>
         <button data-home-action="courses"><i>⌖</i><span>活動中心</span></button>
         <button data-home-action="wallet"><i>▰</i><span>商脈錢包</span></button>
-        <button data-home-action="profile"><i>⌘</i><span>更多功能</span></button>
       </div>
       ${blogCards?`<section class="ak-blog"><header><div><small>A-KAFFIT JOURNAL</small><h2>最新文章</h2></div><span>觀點・活動・商脈</span></header><div class="ak-blog-grid">${blogCards}</div></section>`:""}
     </section>
