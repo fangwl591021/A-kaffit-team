@@ -13,8 +13,11 @@ test("home reuses the compact aiweb member banner", () => {
 
   assert.match(home, /member-portal ak-home-banner/);
   assert.match(home, /portal-profile/);
-  assert.match(home, /商脈指數/);
   assert.match(home, /商脈點數/);
+  assert.match(home, /專屬分享/);
+  assert.match(home, /data-home-action="wallet"/);
+  assert.match(home, /data-home-action="share"/);
+  assert.doesNotMatch(home, /商脈指數/);
   assert.doesNotMatch(home, /ak-hero|ak-index-card|ak-meter/);
   assert.match(css, /\.ak-home-content\{padding:14px 18px 30px\}/);
   assert.doesNotMatch(css, /\.ak-hero|\.ak-index-card|\.ak-meter/);
