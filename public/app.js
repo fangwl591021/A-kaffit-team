@@ -336,6 +336,7 @@ async function registerWithPhoneBirthday() {
   const phone = $("#registerPhone")?.value.trim() || "";
   const birthday = $("#registerBirthday")?.value || "";
   if (!phone || !birthday) return alert("請填寫手機與生日");
+  if (!/^\d{8}$/.test(birthday)) return alert("生日請直接輸入 8 位西元數字，例如 17901021");
   try {
     const result = await withActionFeedback(button, () => api("/v1/auth/phone-birthday", {
       method: "POST",
@@ -352,7 +353,7 @@ async function registerWithPhoneBirthday() {
   }
 }
 async function renderLogin() {
-  $("#app").innerHTML = `<section class="ak-register"><div class="ak-register-brand">K</div><small>A-KAFFIT TEAM</small><h1>開啟你的商脈中心</h1><p>初期免 LINE Login，以手機與生日建立個人資料。</p><label>手機<input id="registerPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0912345678" maxlength="20"></label><label>生日<input id="registerBirthday" type="date" max="${new Date().toISOString().slice(0,10)}"></label><button class="btn" id="register">開始使用</button><em>手機與生日僅作初期識別，之後可在會員資料補齊內容。</em></section>`;
+  $("#app").innerHTML = `<section class="ak-register"><div class="ak-register-wordmark">A-KAFFIT TEAM</div><h1>開啟你的商脈中心</h1><p>初期免 LINE Login，以手機與生日建立個人資料。</p><label>手機<input id="registerPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0912345678" maxlength="20"></label><label>生日（西元 8 位數字）<input id="registerBirthday" type="text" inputmode="numeric" autocomplete="bday" placeholder="17901021" pattern="[0-9]{8}" maxlength="8"></label><button class="btn" id="register">開始使用</button><em>手機與生日僅作初期識別，之後可在會員資料補齊內容。</em></section>`;
   $("#register").onclick = registerWithPhoneBirthday;
 }async function render() {
   // 已有工作階段的會員再次從邀約 QR 進站時，保留單一步驟讓他確認推薦關係；
@@ -920,7 +921,7 @@ async function home() {
   const indexScore = Math.min(99, 68 + Math.min(cards.length, 10) + Math.min(sessions.length, 8));
   const greeting = state.member?.displayName || `會員${String(state.member?.phone || "").slice(-4)}`;
   layout(`<section class="ak-dashboard">
-    <header class="ak-hero"><div class="ak-brandmark">K</div><button class="ak-bell" type="button" aria-label="通知">♢</button><h1>${esc(greeting)}，早安！</h1><p>${dateText}・今日商務中心</p></header>
+    <header class="ak-hero"><button class="ak-bell" type="button" aria-label="通知">♢</button><h1>${esc(greeting)}，早安！</h1><p>${dateText}・今日商務中心</p></header>
     <section class="ak-index-card"><div class="ak-meter" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><i style="--score:${indexScore}"></i></div><h2>今日商脈指數</h2><strong>${indexScore}</strong><p>狀態良好・持續累積人脈</p><b>↗ +${Math.max(1, Math.min(cards.length + sessions.length, 12))}</b>
       <div class="ak-stats"><article><i>●</i><span>商脈點數</span><strong>${format(wallet.balance)}</strong></article><article><i>▣</i><span>收藏名片</span><strong>${format(cards.length)}</strong></article><article><i>◇</i><span>智能配對</span><strong>開啟</strong></article><article><i>▦</i><span>近期活動</span><strong>${format(sessions.length)}</strong></article></div>
       <div class="ak-feature-grid">
@@ -1897,10 +1898,11 @@ function crmInsightSection(card) {
   const insight=card.aiInsights || {};
   const status=insight.status || "";
   const labels={personality:"個性",interests:"興趣",wealth:"財富",health:"健康",career:"事業"};
-  if(status==="queued" || status==="processing") return `<section class="crm-insights crm-insights-pending"><h3>✧ 五大標籤</h3><p>AI 正在分析名片公開文字，完成後會自動補上個性、興趣、財富、健康、事業五項 CRM 溝通參考。</p></section>`;
-  if(status==="failed") return `<section class="crm-insights crm-insights-pending"><h3>✧ 五大標籤</h3><p>這張名片暫時無法完成 AI 分析：${esc(insight.error || "請稍後重新上傳名片")}。</p></section>`;
-  const cards=Object.entries(labels).map(([key,label])=>`<article class="crm-insight-card crm-insight-${key}"><h4>${label}</h4><p>${esc(insight.cards?.[key] || "尚待 AI 分析")}</p></article>`).join("");
-  return `<section class="crm-insights"><div class="crm-insights-heading"><h3>✧ 五大標籤</h3><span>依名片公開文字分析，供 CRM 溝通與跟進參考</span></div><div class="crm-insights-grid">${cards}</div></section>`;
+  if(status==="queued" || status==="processing") return `<section class="crm-insights crm-insights-pending"><h3>✧ 五大標籤</h3><p>正在分析名片內容，完成後會自動更新個性、興趣、財富、健康、事業五項標籤。</p><button class="btn alt" type="button" data-retry-insights>立即重新分析</button></section>`;
+  if(status==="failed") return `<section class="crm-insights crm-insights-pending"><h3>✧ 五大標籤</h3><p>這張名片暫時無法完成分析：${esc(insight.error || "請稍後重試")}。</p><button class="btn alt" type="button" data-retry-insights>重新分析</button></section>`;
+  if(status!=="ready") return `<section class="crm-insights crm-insights-pending"><h3>✧ 五大標籤</h3><p>尚未建立五大標籤。</p><button class="btn alt" type="button" data-retry-insights>開始分析</button></section>`;
+  const cards=Object.entries(labels).map(([key,label])=>`<article class="crm-insight-card crm-insight-${key}"><h4>${label}</h4><p>${esc(insight.cards?.[key] || "尚無分析內容")}</p></article>`).join("");
+  return `<section class="crm-insights"><div class="crm-insights-heading"><h3>✧ 五大標籤</h3><span>依名片公開文字分析，供 CRM 溝通與跟進參考</span></div><div class="crm-insights-grid">${cards}</div><button class="btn alt crm-insights-retry" type="button" data-retry-insights>重新分析</button></section>`;
 }
 
 function smartMatchHistorySection(history=[]) {
@@ -1929,6 +1931,22 @@ async function showContactEditor(card) {
   layout(`<section class="business-card collection-editor"><div class="business-card-title"><button class="back-card" id="backCollection" aria-label="返回">←</button><h2>名片詳細資料</h2></div>${tabs}${panel}</section>`);
   $("#backCollection").onclick=()=>{ state.collectionCardView=""; state.collectionCardVersion=""; cardCollection(); };
   document.querySelectorAll("[data-collection-card-tab]").forEach((button) => button.onclick = () => { state.collectionCardView=button.dataset.collectionCardTab; showContactEditor(card); });
+  $("[data-retry-insights]")?.addEventListener("click", async (event) => {
+    try {
+      await withActionFeedback(event.currentTarget, () => api(`/v1/card-collection/${encodeURIComponent(card.id)}/recalculate-insights`, { method:"POST", body:"{}" }), { busy:"分析排程中…", success:"已開始分析" });
+      card.aiInsights = { ...(card.aiInsights || {}), status:"queued", error:"" };
+      showContactEditor(card);
+    } catch (error) { alert(error.message); }
+  });
+  if (view === "insights" && ["queued","processing"].includes(card.aiInsights?.status)) {
+    setTimeout(async () => {
+      if (state.collectionCardView !== "insights") return;
+      try {
+        const fresh = (await api("/v1/card-collection")).cards?.find((item) => item.id === card.id);
+        if (fresh) { Object.assign(card, fresh); showContactEditor(card); }
+      } catch (error) { console.warn("Five-tag refresh unavailable", error); }
+    }, 2500);
+  }
   if (view === "edit") {
     bindCollectionIndustryEditor();
     $("#collectionCardForm").onsubmit=async(event)=>{event.preventDefault();const button=event.submitter;try{const updated=await withActionFeedback(button,()=>api(`/v1/card-collection/${encodeURIComponent(card.id)}`,{method:"PATCH",body:JSON.stringify({ ...readCollectionForm(), industry:readCollectionIndustry(), selectedVersion:card.selectedVersion, versions:card.versions, chatAltText:card.chatAltText })}),{busy:"儲存中…",success:"已儲存"});Object.assign(card,updated.card);state.collectionCardView="contact";showContactEditor(card);}catch(error){alert(error.message)}};
@@ -2144,40 +2162,97 @@ async function syncAiWearMemberLineUrl(lineUrl) {
   if (!response.ok || payload.status !== "success") throw new Error(payload.message || "試戴聯絡網址同步失敗");
   return payload.data;
 }
+function birthdayDigits(value="") {
+  return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+function socialLinkRow(link={}) {
+  return `<div class="member-social-row"><input data-social-label value="${esc(link.label || "")}" placeholder="社群名稱，例如 LINE"><input data-social-url type="url" value="${esc(link.url || "")}" placeholder="https://"><button type="button" class="member-social-remove" aria-label="移除社群連結">×</button></div>`;
+}
+function bindSocialLinkRows() {
+  document.querySelectorAll(".member-social-remove").forEach((button) => button.onclick = () => {
+    button.closest(".member-social-row")?.remove();
+    if (!document.querySelector(".member-social-row")) {
+      $("#memberSocialLinks").insertAdjacentHTML("beforeend", socialLinkRow());
+      bindSocialLinkRows();
+    }
+  });
+}
 async function profile(required = false) {
-  const ref = state.member.systemReferrer;
-  const refText = ref
-    ? `${ref.displayName || "會員"}${ref.memberNumber ? `（${ref.memberNumber}）` : ""}`
-    : "無系統推薦人";
-  layout(
-    `<div class="card profile-card">${avatar()}<h2>${required ? "完成會員註冊" : "會員資料"}</h2><p class="muted">手機與生日已建立初期資料；其餘會員內容可在此補齊。</p><label>姓名</label><input id="name" value="${esc(state.member.displayName)}" required><label>性別</label><select id="gender" required><option value="">請選擇</option><option value="female" ${state.member.gender === "female" ? "selected" : ""}>女性</option><option value="male" ${state.member.gender === "male" ? "selected" : ""}>男性</option><option value="other" ${state.member.gender === "other" ? "selected" : ""}>其他</option><option value="prefer_not_to_say" ${state.member.gender === "prefer_not_to_say" ? "selected" : ""}>不透露</option></select><label>生日</label><input id="birthday" type="date" value="${esc(state.member.birthday)}" max="${new Date().toISOString().slice(0,10)}" required><label>公司會員編號</label><input id="companyMemberNumber" value="${esc(state.member.companyMemberNumber)}" placeholder="請輸入直銷公司會員編號" required><label>系統會員編號</label><input value="${esc(state.member.memberNumber)}" readonly><label>系統推薦人</label><input value="${esc(refText)}" readonly><label>手機</label><input id="phone" value="${esc(state.member.phone)}"><button class="btn" id="save">${required ? "完成註冊" : "儲存"}</button>${!required && state.member?.adminAccess?.canAccessAdmin ? `<a class="btn alt" href="/admin">營運管理後台</a>` : ""}${required ? "" : `<button class="btn alt" id="logout">登出</button>`}</div>`,
-  );
+  const links = Array.isArray(state.member.socialLinks) && state.member.socialLinks.length ? state.member.socialLinks : [{ label:"", url:"" }];
+  const logo = state.member.pictureUrl
+    ? `<img id="memberLogoPreview" src="${esc(state.member.pictureUrl)}" alt="會員 Logo">`
+    : `<span id="memberLogoPreview">${esc((state.member.displayName || "會").slice(0,1))}</span>`;
+  layout(`<div class="card profile-card member-registration-card">
+    <h2>${required ? "完成會員註冊" : "會員註冊資料"}</h2>
+    <p class="muted">手機與生日是登入驗證資料；其餘內容可在這裡補齊或更新。</p>
+    <div class="member-logo-upload"><div class="member-logo-preview">${logo}</div><div><strong>Logo 圖片</strong><label class="btn alt member-logo-button">選擇圖片<input id="memberLogoFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label><small>JPEG、PNG、WebP，最大 3MB</small></div></div>
+    <label>顯示名稱</label><input id="displayName" value="${esc(state.member.displayName || "")}" maxlength="120" required>
+    <label>姓名</label><input id="fullName" value="${esc(state.member.fullName || "")}" maxlength="120" autocomplete="name" required>
+    <label>生日（西元 8 位數字）</label><input id="birthday" type="text" inputmode="numeric" value="${esc(birthdayDigits(state.member.birthday))}" placeholder="17901021" pattern="[0-9]{8}" maxlength="8" required>
+    <label>性別</label><select id="gender" required><option value="">請選擇</option><option value="female" ${state.member.gender === "female" ? "selected" : ""}>女性</option><option value="male" ${state.member.gender === "male" ? "selected" : ""}>男性</option><option value="other" ${state.member.gender === "other" ? "selected" : ""}>其他</option><option value="prefer_not_to_say" ${state.member.gender === "prefer_not_to_say" ? "selected" : ""}>不透露</option></select>
+    <label>驗證手機</label><input value="${esc(state.member.phone || "")}" readonly>
+    <div class="member-social-heading"><label>社群連結</label><button type="button" id="addSocialLink">＋ 新增</button></div>
+    <div id="memberSocialLinks" class="member-social-list">${links.map(socialLinkRow).join("")}</div>
+    <p class="member-registration-number">系統會員編號：${esc(state.member.memberNumber || "建立中")}</p>
+    <button class="btn" id="save">${required ? "完成註冊" : "儲存會員資料"}</button>
+    ${!required && state.member?.adminAccess?.canAccessAdmin ? `<a class="btn alt" href="/admin">營運管理後台</a>` : ""}
+    ${required ? "" : `<button class="btn alt" id="logout">登出</button>`}
+  </div>`);
+  bindSocialLinkRows();
+  $("#addSocialLink").onclick = () => {
+    if (document.querySelectorAll(".member-social-row").length >= 10) return alert("最多可新增 10 組社群連結");
+    $("#memberSocialLinks").insertAdjacentHTML("beforeend", socialLinkRow());
+    bindSocialLinkRows();
+  };
+  $("#memberLogoFile").onchange = () => {
+    const file = $("#memberLogoFile").files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { $("#memberLogoFile").value=""; return alert("Logo 圖片不可超過 3MB"); }
+    const preview = URL.createObjectURL(file);
+    $(".member-logo-preview").innerHTML = `<img id="memberLogoPreview" src="${preview}" alt="Logo 預覽">`;
+  };
   $("#save").onclick = async () => {
     const button = $("#save");
+    const birthday = birthdayDigits($("#birthday").value);
+    if (!$("#displayName").value.trim()) return alert("請輸入顯示名稱");
+    if (!$("#fullName").value.trim()) return alert("請輸入姓名");
+    if (!/^\d{8}$/.test(birthday)) return alert("生日請輸入 8 位西元數字，例如 17901021");
     if (!$("#gender").value) return alert("請選擇性別");
-    if (!$("#birthday").value) return alert("請選擇生日");
+    const socialLinks = [...document.querySelectorAll(".member-social-row")].map((row) => ({
+      label: row.querySelector("[data-social-label]").value.trim(),
+      url: row.querySelector("[data-social-url]").value.trim(),
+    })).filter((item) => item.label || item.url);
     try {
-      state.member = (
-        await withActionFeedback(button, () => api("/v1/me", {
-          method: "PATCH",
-          body: JSON.stringify({
-            displayName: $("#name").value,
-            phone: $("#phone").value,
-            gender: $("#gender").value,
-            birthday: $("#birthday").value,
-            companyMemberNumber: $("#companyMemberNumber").value,
-            lineUrl: state.member.lineUrl || "",
+      await withActionFeedback(button, async () => {
+        const logoFile = $("#memberLogoFile").files?.[0];
+        if (logoFile) {
+          const form = new FormData();
+          form.append("logo", logoFile);
+          const response = await fetch("/v1/me/logo", { method:"POST", headers:{ authorization:`Bearer ${state.token}` }, body:form });
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error || "Logo 上傳失敗");
+          state.member = { ...state.member, ...payload.member, pictureUrl:`${payload.member.pictureUrl}?v=${Date.now()}` };
+        }
+        const lineUrl = socialLinks.find((item) => /^https:\/\/(lin\.ee|line\.me|liff\.line\.me)\//i.test(item.url))?.url || "";
+        state.member = (await api("/v1/me", {
+          method:"PATCH",
+          body:JSON.stringify({
+            displayName:$("#displayName").value,
+            fullName:$("#fullName").value,
+            gender:$("#gender").value,
+            birthday,
+            socialLinks,
+            lineUrl,
+            companyMemberNumber:state.member.companyMemberNumber || "",
           }),
-        }), { busy: required ? "註冊處理中…" : "儲存中…", success: required ? "註冊完成" : "已儲存" })
-      ).member;
+        })).member;
+      }, { busy:"儲存中…", success:required ? "註冊完成" : "已儲存" });
       alert(required ? "註冊完成" : "會員資料已儲存");
       const afterProfile = sessionStorage.getItem("klinkweb_after_profile");
       sessionStorage.removeItem("klinkweb_after_profile");
       state.tab = afterProfile === "zodiac" ? "zodiac" : state.courseSession ? "courses" : "home";
       render();
-    } catch (e) {
-      alert(e.message);
-    }
+    } catch (error) { alert(error.message); }
   };
   $("#logout")?.addEventListener("click", () => {
     localStorage.removeItem("klinkweb_session");
@@ -2185,6 +2260,7 @@ async function profile(required = false) {
     renderLogin();
   });
 }
+
 async function boot() {
   state.config = await (await fetch("/api/config")).json();
   await render();

@@ -651,6 +651,21 @@ async function app(request, env, ctx) {
     const imageBytes = row.bytes instanceof Uint8Array ? row.bytes : new Uint8Array(row.bytes);
     return new Response(imageBytes, { headers: { "content-type": row.content_type || "application/octet-stream", "content-length": String(imageBytes.byteLength), "cache-control": "public, max-age=31536000, immutable" } });
   }
+  const memberLogo = url.pathname.match(/^\/v1\/member-logo\/([^/]+)$/);
+  if (["GET", "HEAD"].includes(request.method) && memberLogo) {
+    const userId = decodeURIComponent(memberLogo[1]);
+    const row = await env.DB.prepare("SELECT logo_r2_key FROM member_profiles WHERE platform_user_id = ?").bind(userId).first();
+    if (!row?.logo_r2_key || !env.MEDIA) return new Response("Not found", { status: 404 });
+    const object = await env.MEDIA.get(row.logo_r2_key);
+    if (!object) return new Response("Not found", { status: 404 });
+    return new Response(request.method === "HEAD" ? null : object.body, {
+      headers: {
+        "content-type": object.httpMetadata?.contentType || "image/webp",
+        "cache-control": "public, max-age=300",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  }
   const contactImage = url.pathname.match(/^\/v1\/card-collection\/([^/]+)\/image$/);
   if (["GET", "HEAD"].includes(request.method) && contactImage) {
     const member = await currentMember(request, env);
@@ -774,6 +789,36 @@ async function app(request, env, ctx) {
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
     const adminAccess = await mergedAdminAccess(env,member);
     return json({ success: true, member: { ...member, adminAccess } });
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/me/logo") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
+    if (!env.MEDIA) return json({ success: false, error: "Logo 儲存空間尚未設定" }, 503);
+    try {
+      const form = await request.formData();
+      const file = form.get("logo");
+      if (!(file instanceof File)) return badRequest("請選擇 Logo 圖片");
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return badRequest("Logo 僅支援 JPEG、PNG 或 WebP");
+      if (file.size > 3 * 1024 * 1024) return badRequest("Logo 圖片不可超過 3MB");
+      const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+      const key = `member-logos/${member.userId}/${crypto.randomUUID()}.${extension}`;
+      await env.MEDIA.put(key, file.stream(), {
+        httpMetadata: { contentType: file.type },
+        customMetadata: { userId: member.userId },
+      });
+      const old = await env.DB.prepare("SELECT logo_r2_key FROM member_profiles WHERE platform_user_id = ?").bind(member.userId).first();
+      const pictureUrl = `${url.origin}/v1/member-logo/${encodeURIComponent(member.userId)}`;
+      await env.DB.prepare("UPDATE member_profiles SET logo_r2_key = ?, picture_url = ?, updated_at = CURRENT_TIMESTAMP WHERE platform_user_id = ?")
+        .bind(key, pictureUrl, member.userId).run();
+      if (old?.logo_r2_key && old.logo_r2_key !== key) {
+        const cleanup = env.MEDIA.delete(old.logo_r2_key).catch((error) => console.error("Old member logo cleanup failed", error));
+        if (ctx?.waitUntil) ctx.waitUntil(cleanup); else cleanup.catch(() => null);
+      }
+      return json({ success: true, member: await getMember(env.DB, member.userId) }, 201);
+    } catch (error) {
+      return badRequest(error.message || "Logo 上傳失敗");
+    }
   }
 
   if (request.method === "GET" && url.pathname === "/v1/cards/me") {
@@ -1101,6 +1146,22 @@ async function app(request, env, ctx) {
       return json({ success: true, ...result, reward }, result.updated ? 200 : 201);
     } catch (error) {
       return json({ success: false, error: error.message || "名片儲存失敗", code: error.code || "save_failed", duplicate: error.duplicate || null }, error.code ? 409 : 400);
+    }
+  }
+
+  const contactInsightRetryMatch = url.pathname.match(/^\/v1\/card-collection\/([^/]+)\/recalculate-insights$/);
+  if (request.method === "POST" && contactInsightRetryMatch) {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
+    try {
+      const cardId = decodeURIComponent(contactInsightRetryMatch[1]);
+      const aiProvider = await resolveCardAiProvider(env);
+      if (!aiProvider) return json({ success: false, error: "五大標籤分析服務尚未連線" }, 503);
+      await queueContactCrmInsights(env.DB, member.userId, cardId, true);
+      scheduleContactCrmInsights(env, ctx, member.userId, cardId);
+      return json({ success: true, status: "queued" }, 202);
+    } catch (error) {
+      return badRequest(error.message || "五大標籤重新分析失敗");
     }
   }
 
