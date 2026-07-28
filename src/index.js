@@ -112,7 +112,6 @@ import {
   parseCalendarVoice,
 } from "./calendar-voice.js";
 import { buildMatchingCandidates, isSupportedMatchingQuery, matchContacts, SMART_MATCH_SCOPE_MESSAGE } from "./smart-matching.js";
-import { askMlmProductAdvisor } from "./product-advisor.js";
 import {
   findCachedSmartMatch,
   listContactSmartMatchHistory,
@@ -843,7 +842,6 @@ async function app(request, env, ctx) {
   if (url.pathname === "/v1/personal-calendar" && request.method === "GET") {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
-    try { await syncMlmCourses(env); } catch (error) { console.error("MLM calendar sync failed", error); }
     const now = new Date();
     const from = url.searchParams.get("from") || new Date(now.getFullYear(), now.getMonth() - 6, 1).toISOString();
     const to = url.searchParams.get("to") || new Date(now.getFullYear(), now.getMonth() + 18, 1).toISOString();
@@ -1039,64 +1037,24 @@ async function app(request, env, ctx) {
       const query = String(body.query || "").trim();
       if (!isSupportedMatchingQuery(query)) return badRequest(SMART_MATCH_SCOPE_MESSAGE);
       const contacts = await listContacts(env.DB, member.userId, "");
-      const numberScience = await loadNumberScienceMatchingContext(env, member);
       const requestKey = await sha256(JSON.stringify({
-        version: 2,
+        version: 3,
         query: query.replace(/\s+/g, " ").toLocaleLowerCase("zh-TW"),
         candidates: buildMatchingCandidates(contacts),
-        numberScience: numberScience.text,
       }));
       const cached = await findCachedSmartMatch(env.DB, member.userId, requestKey, contacts);
-      if (cached) return json({ success: true, ...cached, cached: true });
+      if (cached) return json({ success: true, ...cached, cached: true, numberScienceUsed: false, numberScienceReports: [] });
       const aiProvider = await resolveCardAiProvider(env);
-      const matches = await matchContacts({
-        contacts,
-        member,
-        query,
-        numberScienceContext: numberScience.text,
-        apiKey: aiProvider,
-        model: env.OPENAI_CARD_MODEL,
-      });
-      await saveSmartMatch(env.DB, {
-        userId: member.userId,
-        requestKey,
-        query,
-        matches,
-        numberScienceUsed: Boolean(numberScience.text),
-        numberScienceReports: numberScience.labels,
-      });
-      return json({
-        success: true,
-        matches,
-        cached: false,
-        numberScienceUsed: Boolean(numberScience.text),
-        numberScienceReports: numberScience.labels,
-      });
+      const matches = await matchContacts({ contacts, member, query, apiKey: aiProvider, model: env.OPENAI_CARD_MODEL });
+      await saveSmartMatch(env.DB, { userId: member.userId, requestKey, query, matches, numberScienceUsed: false, numberScienceReports: [] });
+      return json({ success: true, matches, cached: false, numberScienceUsed: false, numberScienceReports: [] });
     } catch (error) {
       return badRequest(error.message || "智能配對失敗");
     }
   }
 
-  if (request.method === "POST" && url.pathname === "/v1/smart-product/ask") {
-    const member = await currentMember(request, env);
-    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
-    try {
-      const body = (await readJson(request)) || {};
-      const numberScience = await loadNumberScienceMatchingContext(env, member);
-      const result = await askMlmProductAdvisor(env.MLM_WORKER, {
-        query: body.query,
-        profileContext: numberScience.text,
-        memberLineUrl: member.lineUrl,
-      });
-      return json({
-        success: true,
-        ...result,
-        profileStyleUsed: Boolean(numberScience.text),
-      });
-    } catch (error) {
-      const message = error.message || "康立商品詢問失敗";
-      return json({ success: false, error: message }, /至少 2 個字/.test(message) ? 400 : 502);
-    }
+  if (url.pathname === "/v1/smart-product/ask") {
+    return json({ success: false, error: "康立商品內容已下架" }, 410);
   }
 
   if (request.method === "POST" && url.pathname === "/v1/card-collection/imports") {
@@ -1251,11 +1209,8 @@ async function app(request, env, ctx) {
     });
   }
 
-  if (url.pathname === "/v1/number-science/reports" && (request.method === "GET" || request.method === "POST")) {
-    const member = await currentMember(request, env);
-    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
-    const body = request.method === "GET" ? { action: "list" } : ((await readJson(request)) || {});
-    return proxyNumberScienceRequest(env, member, body);
+  if (url.pathname === "/v1/number-science/reports") {
+    return json({ success: false, error: "數字科學內容已下架" }, 410);
   }
 
   if (request.method === "POST" && url.pathname === "/v1/points/mlm-balance") {

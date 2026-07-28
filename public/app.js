@@ -207,7 +207,7 @@ function avatar(member = state.member) {
     : `<span class="avatar placeholder">${esc((member?.displayName || "L").slice(0, 1))}</span>`;
 }
 function layout(body) {
-  const featureCopy = { wallet:["點數錢包","查看目前可用點數與交易紀錄。"], courses:["課程活動","查看課程、完成報名與簽到。"], daily:[state.daily?.campaign?.name || "簽到贈點活動",`向左滑動輪播卡；完成 ${Number(state.daily?.campaign?.requiredCreativeCount) || 0} 項觀看後，即可每日簽到。`], card:["我的名片","編輯並分享你的專屬數位名片。"], zodiac:["星座運勢","依你的生日提供今日星座建議。"], cardCollection:["名片收藏","掃描、整理並搜尋你的私人名片簿。"], smartMatch:["智能配對","輸入合作需求，從你的名片收藏中找出適合的人選。"], calendar:["個人行事曆","同步顯示 MLM 活動與你的報名狀態。"], profile:["會員資料","管理你的會員資料與個人資訊。"] };
+  const featureCopy = { wallet:["點數錢包","查看目前可用點數與交易紀錄。"], courses:["課程活動","查看課程、完成報名與簽到。"], daily:[state.daily?.campaign?.name || "簽到贈點活動",`向左滑動輪播卡；完成 ${Number(state.daily?.campaign?.requiredCreativeCount) || 0} 項觀看後，即可每日簽到。`], card:["我的名片","編輯並分享你的專屬數位名片。"], zodiac:["星座運勢","依你的生日提供今日星座建議。"], cardCollection:["名片收藏","掃描、整理並搜尋你的私人名片簿。"], smartMatch:["智能配對","輸入合作需求，從你的名片收藏中找出適合的人選。"], calendar:["個人行事曆","管理個人行程、聯絡人生日與提醒。"], profile:["會員資料","管理你的會員資料與個人資訊。"] };
   const [featureTitle,featureHint] = featureCopy[state.tab] || ["康立行動入口","會員服務與活動入口。"];
   const headerAction = state.tab === "card" ? `<button class="feature-header-action" data-home-action="cardCollection">名片收藏</button>` : "";
   const featureHeader = `<header class="hero member-hero feature-member-hero"><div class="daily-banner-profile">${avatar()}<strong>${esc(state.member?.displayName || "LINE 會員")}</strong></div><div class="daily-banner-copy"><h1>${esc(featureTitle)}</h1><p>${esc(featureHint)}</p></div>${headerAction}</header>`;
@@ -450,27 +450,6 @@ function zodiacFromBirthday(birthday) {
   const result = zodiacRanges.find(([max]) => md <= max) || zodiacRanges[0];
   return { name:result[1], symbol:result[2], parts };
 }
-function lifeNumberFromBirthday(birthday) {
-  const parts = birthdayParts(birthday);
-  if (!parts) return null;
-  let total = String(parts.year) + String(parts.month).padStart(2,"0") + String(parts.day).padStart(2,"0");
-  total = total.split("").reduce((sum,digit) => sum + Number(digit), 0);
-  while (total > 9 && total !== 11 && total !== 22) total = String(total).split("").reduce((sum,digit) => sum + Number(digit), 0);
-  const profiles = {
-    1:["開創者","適合主動做決定、設定方向；提醒自己保留他人的參與空間。"],
-    2:["協調者","重視關係與感受；清楚表達需求，能避免把壓力留給自己。"],
-    3:["表達者","擅長創意與溝通；把靈感整理成可執行的小步驟會很有成果。"],
-    4:["建構者","可靠且重視秩序；有計畫地累積，會是你的安全感來源。"],
-    5:["探索者","喜歡新鮮與彈性；在變化中留下核心原則，方向就不會散掉。"],
-    6:["照顧者","天生在意責任與美感；先照顧自己，才能更長久地照顧他人。"],
-    7:["思辨者","需要獨處思考與理解深度；用你的觀察力建立真正的專業。"],
-    8:["實踐者","有資源整合與結果意識；善用影響力時也記得維持溫度。"],
-    9:["整合者","有同理與大局觀；選擇值得長期投入的人事物，能發揮更大價值。"],
-    11:["啟發者","直覺與感受很強；把願景化為具體行動，會帶給身邊人信心。"],
-    22:["實現者","能把大想法落地；拆解階段目標，會讓影響力穩定擴大。"]
-  };
-  return { number:total, ...(profiles[total] ? { title:profiles[total][0], advice:profiles[total][1] } : {}) };
-}
 function chineseZodiacFromBirthday(birthday) {
   const parts = birthdayParts(birthday);
   if (!parts) return null;
@@ -481,10 +460,10 @@ function fortuneSeed(text) {
   return Math.abs(Array.from(text).reduce((sum,char) => ((sum << 5) - sum + char.charCodeAt(0)) | 0, 0));
 }
 function buildPersonalFortune(birthday) {
-  const zodiac = zodiacFromBirthday(birthday), life = lifeNumberFromBirthday(birthday), chinese = chineseZodiacFromBirthday(birthday);
-  if (!zodiac || !life || !chinese) return null;
+  const zodiac = zodiacFromBirthday(birthday), chinese = chineseZodiacFromBirthday(birthday);
+  if (!zodiac || !chinese) return null;
   const now = new Date();
-  const seed = fortuneSeed([now.getFullYear(),now.getMonth()+1,now.getDate(),zodiac.name,life.number].join("-"));
+  const seed = fortuneSeed([now.getFullYear(),now.getMonth()+1,now.getDate(),zodiac.name,chinese.name].join("-"));
   const themes = ["溫柔聚焦","穩定前進","好感累積","靈感開展","自信表達","關係加溫","節奏整理"];
   const advices = [
     "今天適合把一件最重要的事做得更完整，不必同時回應所有事情。",
@@ -497,101 +476,22 @@ function buildPersonalFortune(birthday) {
   ];
   const colors = ["玫瑰粉","香檳金","奶油白","霧紫","珊瑚橘","鼠尾草綠","可可棕"];
   const index = seed % themes.length;
-  return { zodiac, life, chinese, theme:themes[index], advice:advices[index], luckyColor:colors[(seed >> 2) % colors.length], score:72 + seed % 25, relation:68 + (seed >> 1) % 29, career:70 + (seed >> 3) % 27, date:`${now.getMonth()+1} 月 ${now.getDate()} 日` };
+  return { zodiac, chinese, theme:themes[index], advice:advices[index], luckyColor:colors[(seed >> 2) % colors.length], score:72 + seed % 25, relation:68 + (seed >> 1) % 29, career:70 + (seed >> 3) % 27, date:`${now.getMonth()+1} 月 ${now.getDate()} 日` };
 }
 function showBirthdayRequiredDialog() {
   document.querySelector(".birthday-required-dialog")?.remove();
   const dialog = document.createElement("div");
   dialog.className = "birthday-required-dialog";
-  dialog.innerHTML = `<div class="birthday-required-sheet" role="dialog" aria-modal="true" aria-labelledby="birthdayPromptTitle"><span class="zodiac-prompt-icon">✦</span><h2 id="birthdayPromptTitle">先填寫生日，才能查看星座運勢</h2><p>生日只用於判斷你的星座、生肖與生命靈數，不會公開給其他會員。</p><div class="birthday-required-actions"><button class="btn alt" data-zodiac-prompt-close>稍後再說</button><button class="btn" data-zodiac-prompt-fill>前往填寫生日</button></div></div>`;
+  dialog.innerHTML = `<div class="birthday-required-sheet" role="dialog" aria-modal="true" aria-labelledby="birthdayPromptTitle"><span class="zodiac-prompt-icon">✦</span><h2 id="birthdayPromptTitle">先填寫生日，才能查看星座運勢</h2><p>生日只用於判斷你的星座與生肖，不會公開給其他會員。</p><div class="birthday-required-actions"><button class="btn alt" data-zodiac-prompt-close>稍後再說</button><button class="btn" data-zodiac-prompt-fill>前往填寫生日</button></div></div>`;
   document.body.appendChild(dialog);
   dialog.querySelector("[data-zodiac-prompt-close]").onclick = () => dialog.remove();
   dialog.querySelector("[data-zodiac-prompt-fill]").onclick = async () => { dialog.remove(); sessionStorage.setItem("klinkweb_after_profile", "zodiac"); state.tab = "profile"; await render(); setTimeout(() => $("#birthday")?.focus(), 0); };
 }
-const numberScienceProducts = [
-  { type:1, key:"complete", pricingKey:"fullReport", title:"完整報告", description:"個人核心數字、特質與完整解析", cost:50, person:false },
-  { type:2, key:"daily", pricingKey:"dailyReport", title:"流日", description:"依今日日期查看當日數字指引", cost:10, person:false },
-  { type:4, key:"matching", pricingKey:"matchingReport", title:"配對", description:"輸入對方生日，查看彼此互動磁場", cost:10, person:true },
-  { type:5, key:"workplace", pricingKey:"workplaceReport", title:"職場", description:"分析你與工作夥伴的合作關係", cost:10, person:true },
-  { type:6, key:"love", pricingKey:"loveReport", title:"愛情", description:"分析兩人的情感互動與相處方向", cost:10, person:true },
-];
-function applyNumberSciencePricing(pricing={}) {
-  for(const product of numberScienceProducts){
-    const next=Number(pricing[product.pricingKey]);
-    if(Number.isInteger(next)&&next>0)product.cost=next;
-  }
-}
-
-function numberScienceReportDialog(item, cached=false) {
-  document.querySelector(".number-science-report-dialog")?.remove();
-  const report=item?.report||{};
-  const sections=Array.isArray(report.sections)?report.sections:[];
-  const dialog=document.createElement("div");
-  dialog.className="number-science-report-dialog";
-  dialog.innerHTML=`<section class="number-science-report-sheet"><header><div><small>${cached?"已購報告・不重複扣點":"報告完成"}</small><h2>${esc(report.title||item?.productLabel||"数字科学報告")}</h2></div><button type="button" aria-label="關閉">×</button></header><div class="number-science-report-meta"><span>${esc(item?.productLabel||"")}</span><b>${Number(item?.pointCost||0)} K點</b>${item?.personName?`<span>對象：${esc(item.personName)}</span>`:""}</div><div class="number-science-sections">${sections.map((section,index)=>`<details ${index===0?"open":""}><summary>${esc(section.title||`第 ${index+1} 章`)}</summary><div>${esc(section.content||"")}</div></details>`).join("")||"<p class=\"muted\">報告內容暫時無法顯示。</p>"}</div><p class="number-science-disclaimer">本內容為數字科學之生活與關係參考，不構成醫療、投資、法律或其他專業建議。</p></section>`;
-  document.body.appendChild(dialog);
-  const close=()=>dialog.remove();
-  dialog.querySelector("header button").onclick=close;
-  dialog.addEventListener("click",event=>{if(event.target===dialog)close()});
-}
-
-async function openNumberScienceHistory(id, button) {
-  await withActionFeedback(button,async()=>{
-    const result=await api("/v1/number-science/reports",{method:"POST",body:JSON.stringify({action:"get",id})});
-    numberScienceReportDialog(result.item,true);
-  },{busy:"讀取中…",success:"已開啟"}).catch(error=>alert(error.message));
-}
-
-function openNumberSciencePurchase(requestType) {
-  const product=numberScienceProducts.find(item=>item.type===Number(requestType));
-  if(!product)return;
-  if(!state.member?.profileCompletedAt||!state.member?.birthday){
-    showBirthdayRequiredDialog();
-    return;
-  }
-  document.querySelector(".number-science-purchase-dialog")?.remove();
-  const memberGender=state.member?.gender==="male"?"0":state.member?.gender==="female"?"1":"";
-  const dialog=document.createElement("div");
-  dialog.className="number-science-purchase-dialog";
-  dialog.innerHTML=`<form class="number-science-purchase-sheet"><header><div><small>数字科学</small><h2>${esc(product.title)}・${product.cost} K點</h2></div><button type="button" data-close aria-label="關閉">×</button></header><p>將使用你註冊的生日 <b>${esc(state.member?.birthday||"")}</b> 產生報告。</p><label>本次報告用性別<select name="selfGender" required><option value="">請選擇</option><option value="0" ${memberGender==="0"?"selected":""}>男</option><option value="1" ${memberGender==="1"?"selected":""}>女</option></select></label>${product.person?`<div class="number-science-person"><h3>對方資料</h3><label>姓名<input name="personName" maxlength="80" required autocomplete="name"></label><label>生日<input name="personBirthday" type="date" required></label><label>性別<select name="personGender" required><option value="">請選擇</option><option value="0">男</option><option value="1">女</option></select></label></div>`:""}<label class="number-science-consent"><input name="consent" type="checkbox" required><span>我同意為產生本次報告，將上述姓名、生日與性別傳送至数字科学服務。報告成功後扣除 ${product.cost} K點；失敗不扣點。</span></label><button class="btn" type="submit">確認產生並扣 ${product.cost} K點</button><p class="muted small">相同已購報告再次查看不會重複扣點；流日報告每日視為新報告。</p></form>`;
-  document.body.appendChild(dialog);
-  const close=()=>dialog.remove();
-  dialog.querySelector("[data-close]").onclick=close;
-  dialog.addEventListener("click",event=>{if(event.target===dialog)close()});
-  dialog.querySelector("form").onsubmit=async event=>{
-    event.preventDefault();
-    const form=event.currentTarget, submit=form.querySelector("button[type=submit]");
-    const data=new FormData(form);
-    const payload={action:"generate",requestType:product.type,selfGender:data.get("selfGender"),consent:data.get("consent")==="on"};
-    if(product.person)payload.person={name:data.get("personName"),birthDate:data.get("personBirthday"),gender:data.get("personGender")};
-    await withActionFeedback(submit,async()=>{
-      const result=await api("/v1/number-science/reports",{method:"POST",body:JSON.stringify(payload)});
-      applyNumberSciencePricing(result.pricing);
-      close();
-      numberScienceReportDialog(result.item,Boolean(result.cached));
-      const wallet=document.querySelector(".portal-wallet strong");
-      if(wallet&&Number.isFinite(Number(result.balance)))wallet.textContent=format(result.balance);
-    },{busy:"報告產生中，請勿關閉…",success:"報告完成"}).catch(error=>alert(error.message));
-  };
-}
-
-function numberSciencePanel(history=[]) {
-  return `<section class="number-science-card"><div class="number-science-heading"><div><small>生日 × 康立智能 K點</small><h2>数字科学</h2><p>完成註冊後，以會員生日產生個人化報告；只有成功取得報告才扣點。</p></div><span>報告服務</span></div><div class="number-science-products">${numberScienceProducts.map(product=>`<button type="button" data-number-science-product="${product.type}"><i>${product.cost}點</i><strong>${esc(product.title)}</strong><small>${esc(product.description)}</small><b>${product.cost} K點</b></button>`).join("")}</div>${history.length?`<div class="number-science-history"><h3>已購報告</h3>${history.map(item=>`<button type="button" data-number-science-history="${esc(item.id)}"><span><b>${esc(item.productLabel)}</b><small>${item.personName?`對象：${esc(item.personName)}・`:""}${new Date(Number(item.createdAt)||Date.now()).toLocaleDateString("zh-TW")}</small></span><i>查看</i></button>`).join("")}</div>`:""}<p class="number-science-disclaimer">${numberScienceProducts.map(product=>`${esc(product.title)} ${product.cost} 點`).join("；")}。報告屬生活參考。</p></section>`;
-}
-
-function bindNumberScience() {
-  document.querySelectorAll("[data-number-science-product]").forEach(button=>button.onclick=()=>openNumberSciencePurchase(button.dataset.numberScienceProduct));
-  document.querySelectorAll("[data-number-science-history]").forEach(button=>button.onclick=()=>openNumberScienceHistory(button.dataset.numberScienceHistory,button));
-}
-
 async function zodiac() {
   const fortune = buildPersonalFortune(state.member?.birthday);
   if (!fortune) return showBirthdayRequiredDialog();
   const [traits, zodiacTip] = zodiacProfiles[fortune.zodiac.name] || ["獨特、真誠、持續成長","保持自己的步調。"];
-  let reportHistory=[];
-  try { const reportData=await api("/v1/number-science/reports");reportHistory=reportData.reports||[];applyNumberSciencePricing(reportData.pricing); } catch (error) { console.warn("Number science history unavailable",error); }
-  layout(`<section class="zodiac-fortune-card zodiac-comprehensive"><div class="zodiac-fortune-symbol">${fortune.zodiac.symbol}</div><div class="zodiac-fortune-date">${esc(fortune.date)}・${esc(fortune.zodiac.name)}</div><h2>今日運勢｜${esc(fortune.theme)}</h2><div class="zodiac-score"><span>今日整體</span><strong>${fortune.score}</strong><i><b style="width:${fortune.score}%"></b></i></div><p class="zodiac-fortune-advice">${esc(fortune.advice)}</p><div class="zodiac-score-grid"><div><span>事業</span><b>${fortune.career}</b></div><div><span>人際</span><b>${fortune.relation}</b></div><div><span>幸運色</span><b>${esc(fortune.luckyColor)}</b></div></div><div class="zodiac-insight-grid"><article><small>基本性格</small><h3>${esc(fortune.zodiac.name)}</h3><p>${esc(traits)}</p><p class="muted">${esc(zodiacTip)}</p></article><article><small>生肖特質</small><h3>生肖 ${esc(fortune.chinese.name)}</h3><p>${esc(fortune.chinese.trait)}</p><p class="muted">把你的優勢用在最值得經營的關係與目標上。</p></article><article><small>生命靈數</small><h3>${fortune.life.number}｜${esc(fortune.life.title)}</h3><p>${esc(fortune.life.advice)}</p></article></div><div class="zodiac-action"><small>今日行動建議</small><b>選一件最想推進的事情，安排一個能在今天完成的小步驟。</b></div><p class="muted small zodiac-note">內容為個人化生活建議與娛樂參考；每日內容會依日期更新。</p></section>${numberSciencePanel(reportHistory)}`);
-  bindNumberScience();
+  layout(`<section class="zodiac-fortune-card zodiac-comprehensive"><div class="zodiac-fortune-symbol">${fortune.zodiac.symbol}</div><div class="zodiac-fortune-date">${esc(fortune.date)}・${esc(fortune.zodiac.name)}</div><h2>今日運勢｜${esc(fortune.theme)}</h2><div class="zodiac-score"><span>今日整體</span><strong>${fortune.score}</strong><i><b style="width:${fortune.score}%"></b></i></div><p class="zodiac-fortune-advice">${esc(fortune.advice)}</p><div class="zodiac-score-grid"><div><span>事業</span><b>${fortune.career}</b></div><div><span>人際</span><b>${fortune.relation}</b></div><div><span>幸運色</span><b>${esc(fortune.luckyColor)}</b></div></div><div class="zodiac-insight-grid"><article><small>基本性格</small><h3>${esc(fortune.zodiac.name)}</h3><p>${esc(traits)}</p><p class="muted">${esc(zodiacTip)}</p></article><article><small>生肖特質</small><h3>生肖 ${esc(fortune.chinese.name)}</h3><p>${esc(fortune.chinese.trait)}</p><p class="muted">把你的優勢用在最值得經營的關係與目標上。</p></article></div><div class="zodiac-action"><small>今日行動建議</small><b>選一件最想推進的事情，安排一個能在今天完成的小步驟。</b></div><p class="muted small zodiac-note">內容為個人化生活建議與娛樂參考；每日內容會依日期更新。</p></section>`);
 }
 function calendarDateKey(value) {
   const date = new Date(value);
@@ -822,7 +722,7 @@ function renderPersonalCalendarView() {
   const reminderNow=Date.now();
   const reminders=sessions.filter((event)=>!event.allDay&&event.reminderMinutes&&Date.parse(event.startsAt)>=reminderNow&&Date.parse(event.startsAt)-reminderNow<=Number(event.reminderMinutes)*60000).slice(0,3);
   const reminderHtml=reminders.length?`<section class="personal-calendar-reminder"><b>即將開始</b>${reminders.map((event)=>`<span>${esc(calendarTimeText(event))}｜${esc(event.title)}</span>`).join("")}</section>`:"";
-  layout(`${reminderHtml}<section class="personal-calendar-labels"><header><div><small>顯示篩選</small><h2>我的行事曆標籤</h2></div><button id="calendarAddLabel" type="button">＋ 自訂標籤</button></header><p class="muted">點擊標籤可顯示／隱藏行事曆內容。</p><div>${labelHtml}</div></section><section class="personal-calendar-card"><header class="personal-calendar-toolbar"><button id="calendarPrev" type="button">‹</button><div><small>PERSONAL CALENDAR</small><h2>${year} 年 ${month} 月</h2></div><button id="calendarNext" type="button">›</button></header><div class="personal-calendar-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div><div class="personal-calendar-grid">${cells.join("")}</div><div class="personal-calendar-sync-note"><span>●</span> 本月顯示 ${monthSessions.length} 項行程；公司內容同步自 MLM</div></section><section class="personal-calendar-agenda"><header><div><small>當日行程</small><h2>${esc(selectedLabel)}</h2></div><div><button id="calendarToday" type="button">今天</button><button id="calendarAddEvent" type="button">＋ 行程</button></div></header>${eventHtml}</section>`);
+  layout(`${reminderHtml}<section class="personal-calendar-labels"><header><div><small>顯示篩選</small><h2>我的行事曆標籤</h2></div><button id="calendarAddLabel" type="button">＋ 自訂標籤</button></header><p class="muted">點擊標籤可顯示／隱藏行事曆內容。</p><div>${labelHtml}</div></section><section class="personal-calendar-card"><header class="personal-calendar-toolbar"><button id="calendarPrev" type="button">‹</button><div><small>PERSONAL CALENDAR</small><h2>${year} 年 ${month} 月</h2></div><button id="calendarNext" type="button">›</button></header><div class="personal-calendar-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div><div class="personal-calendar-grid">${cells.join("")}</div><div class="personal-calendar-sync-note"><span>●</span> 本月顯示 ${monthSessions.length} 項個人與生日行程</div></section><section class="personal-calendar-agenda"><header><div><small>當日行程</small><h2>${esc(selectedLabel)}</h2></div><div><button id="calendarToday" type="button">今天</button><button id="calendarAddEvent" type="button">＋ 行程</button></div></header>${eventHtml}</section>`);
   document.querySelectorAll("[data-calendar-date]").forEach((button)=>button.onclick=()=>{state.calendarSelectedDate=button.dataset.calendarDate||"";renderPersonalCalendarView();});
   document.querySelectorAll("[data-label-toggle]").forEach((button)=>button.onclick=async()=>{const label=state.calendarLabels.find((item)=>item.id===button.dataset.labelToggle);if(!label)return;button.disabled=true;try{await setCalendarLabelVisible(label,!label.visible);}catch(error){alert(error.message||"標籤更新失敗");button.disabled=false;}});
   document.querySelectorAll("[data-label-delete]").forEach((button)=>button.onclick=async()=>{const label=state.calendarLabels.find((item)=>item.id===button.dataset.labelDelete);if(!label||label.system)return;if(!confirm(`刪除「${label.name}」標籤？標籤內的行程會移到「未分類」。`))return;button.disabled=true;try{await api(`/v1/personal-calendar/labels/${encodeURIComponent(label.id)}`,{method:"DELETE"});await reloadPersonalCalendar();}catch(error){alert(error.message||"標籤刪除失敗");button.disabled=false;}});
@@ -835,7 +735,7 @@ function renderPersonalCalendarView() {
 }
 async function personalCalendar() {
   state.tab="calendar";
-  layout(`<section class="card personal-calendar-loading"><h2>同步個人行事曆中…</h2><p class="muted">正在整合公司、個人與生日提醒。</p></section>`);
+  layout(`<section class="card personal-calendar-loading"><h2>同步個人行事曆中…</h2><p class="muted">正在整合個人行程與生日提醒。</p></section>`);
   try {
     const now=new Date(),from=new Date(now.getFullYear()-1,0,1).toISOString(),to=new Date(now.getFullYear()+2,0,1).toISOString();
     const result=await api(`/v1/personal-calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
@@ -1906,7 +1806,7 @@ function crmInsightSection(card) {
 }
 
 function smartMatchHistorySection(history=[]) {
-  return `<section class="contact-match-history"><div class="contact-match-history-heading"><div><small>智能配對</small><h3>配對紀錄</h3></div><span>${history.length} 筆</span></div>${history.length?`<div class="contact-match-history-list">${history.map((item)=>`<article><div class="contact-match-history-score"><strong>${format(item.score)}</strong><small>%</small></div><div><h4>${esc(item.query||"智能配對需求")}</h4><p>${esc(item.reason||"")}</p><footer><span>推薦第 ${Number(item.rank)||1} 名</span>${item.numberScienceUsed?`<span>已納入数字科学</span>`:""}<time>${new Date(item.createdAt).toLocaleString("zh-TW",{year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</time></footer></div></article>`).join("")}</div>`:`<p class="muted">這張名片尚無智能配對紀錄。完成配對後，需求、分數與推薦理由會保留在這裡。</p>`}</section>`;
+  return `<section class="contact-match-history"><div class="contact-match-history-heading"><div><small>智能配對</small><h3>配對紀錄</h3></div><span>${history.length} 筆</span></div>${history.length?`<div class="contact-match-history-list">${history.map((item)=>`<article><div class="contact-match-history-score"><strong>${format(item.score)}</strong><small>%</small></div><div><h4>${esc(item.query||"智能配對需求")}</h4><p>${esc(item.reason||"")}</p><footer><span>推薦第 ${Number(item.rank)||1} 名</span><time>${new Date(item.createdAt).toLocaleString("zh-TW",{year:"numeric",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</time></footer></div></article>`).join("")}</div>`:`<p class="muted">這張名片尚無智能配對紀錄。完成配對後，需求、分數與推薦理由會保留在這裡。</p>`}</section>`;
 }
 
 async function showContactEditor(card) {
@@ -2000,14 +1900,7 @@ function isSupportedSmartMatchQuery(value = "") {
 
 async function smartMatch() {
   state.tab = "smartMatch";
-  layout(`<section class="smart-service-tabs" aria-label="智能服務"><button type="button" class="active" data-smart-service="talent">找人才</button><button type="button" data-smart-service="product">康立商品</button></section><div id="smartTalentPanel"><section class="card smart-match-card"><div class="smart-match-intro"><div><h2>智能人脈配對</h2><p class="muted">僅提供性格互補與事業夥伴篩選；AI 會結合名片五大標籤與你已購買的数字科学背景，選出最多 3 位合適人選。</p></div></div><label for="smartMatchQuery">我想尋找</label><textarea id="smartMatchQuery" rows="4" maxlength="300" placeholder="例如：尋找性格互補、適合共同拓展市場的事業夥伴"></textarea><div class="smart-match-pool"><span id="smartMatchPool">正在讀取名片收藏…</span><small>電話、Email、地址與私人備註不會傳給 AI；已購数字科学報告只作低權重參考，不另扣點</small></div><button class="btn" id="startSmartMatch" disabled>開始智能配對</button></section><section id="smartMatchResults" class="smart-match-results"><div class="card collection-empty">輸入需求後，配對結果會顯示在這裡。</div></section></div><div id="smartProductPanel" class="hidden"><section class="card smart-match-card smart-product-card"><div class="smart-product-hero"><div><h2>康立商品顧問</h2><p class="muted">可以幫你整理商品規格、成分、使用方式與款式。</p></div><img src="/product-advisor-character.webp" alt="康立商品顧問" width="420" height="385"></div><label for="smartProductQuery">我想了解</label><textarea id="smartProductQuery" rows="4" maxlength="600" placeholder="例如：康綠寶的容量與沖泡方式是什麼？"></textarea><button class="btn" id="startProductAsk">詢問康立商品</button></section><section id="smartProductResults" class="smart-match-results"><div class="card collection-empty">輸入商品問題後，核准範圍內的資料會顯示在這裡。</div></section></div>`);
-  const switchService = (service) => {
-    const productMode = service === "product";
-    $("#smartTalentPanel").classList.toggle("hidden", productMode);
-    $("#smartProductPanel").classList.toggle("hidden", !productMode);
-    document.querySelectorAll("[data-smart-service]").forEach((item) => item.classList.toggle("active", item.dataset.smartService === service));
-  };
-  document.querySelectorAll("[data-smart-service]").forEach((item) => item.onclick = () => switchService(item.dataset.smartService));
+  layout(`<section class="card smart-match-card"><div class="smart-match-intro"><div><h2>智能人脈配對</h2><p class="muted">僅提供性格互補與事業夥伴篩選；系統只依收藏名片的公開資料與五大標籤，選出最多 3 位合適人選。</p></div></div><label for="smartMatchQuery">我想尋找</label><textarea id="smartMatchQuery" rows="4" maxlength="300" placeholder="例如：尋找性格互補、適合共同拓展市場的事業夥伴"></textarea><div class="smart-match-pool"><span id="smartMatchPool">正在讀取名片收藏…</span><small>電話、Email、地址與私人備註不會用於配對</small></div><button class="btn" id="startSmartMatch" disabled>開始智能配對</button></section><section id="smartMatchResults" class="smart-match-results"><div class="card collection-empty">輸入需求後，配對結果會顯示在這裡。</div></section>`);
   const button = $("#startSmartMatch");
   try {
     collectionCards = (await api("/v1/card-collection")).cards || [];
@@ -2027,56 +1920,12 @@ async function smartMatch() {
       const result = await withActionFeedback(button, () => api("/v1/card-collection/match", { method:"POST", body:JSON.stringify({ query }) }), { busy:"AI 配對中…", success:"配對完成" });
       const matches = result.matches || [];
       $("#smartMatchResults").innerHTML = matches.length
-        ? `<div class="smart-match-results-head"><h2>推薦人選</h2><span>${matches.length} 位${result.cached?"・已載入上次結果":""}${result.numberScienceUsed?"・已納入数字科学":""}</span></div>${matches.map(({card,score,reason},index)=>`<button class="card smart-match-result" data-match-card-id="${esc(card.id)}"><span class="smart-match-rank">${index+1}</span><span class="contact-thumb">${card.hasImage?`<img data-contact-image="${esc(card.id)}" alt="">`:esc((card.displayName||"名").slice(0,1))}</span><span class="smart-match-person"><strong>${esc(card.displayName||"未命名")}</strong><small>${esc([card.companyName,card.jobTitle].filter(Boolean).join("／")||"收藏名片")}</small><p>${esc(reason)}</p></span><b class="smart-match-score">${format(score)}<small>%</small></b></button>`).join("")}`
+        ? `<div class="smart-match-results-head"><h2>推薦人選</h2><span>${matches.length} 位${result.cached?"・已載入上次結果":""}</span></div>${matches.map(({card,score,reason},index)=>`<button class="card smart-match-result" data-match-card-id="${esc(card.id)}"><span class="smart-match-rank">${index+1}</span><span class="contact-thumb">${card.hasImage?`<img data-contact-image="${esc(card.id)}" alt="">`:esc((card.displayName||"名").slice(0,1))}</span><span class="smart-match-person"><strong>${esc(card.displayName||"未命名")}</strong><small>${esc([card.companyName,card.jobTitle].filter(Boolean).join("／")||"收藏名片")}</small><p>${esc(reason)}</p></span><b class="smart-match-score">${format(score)}<small>%</small></b></button>`).join("")}`
         : `<div class="card collection-empty">目前沒有足夠符合需求的人選，換一個更具體的需求再試試看。</div>`;
       document.querySelectorAll("[data-match-card-id]").forEach((row) => row.onclick = () => showContactEditor(collectionCards.find((card) => card.id === row.dataset.matchCardId)));
       attachCollectionImages();
     } catch (error) {
-      const message = error.message || "智能配對失敗";
-      $("#smartMatchResults").innerHTML = `<div class="card collection-empty">${esc(message)}</div>`;
-    }
-  };
-  function smartProductAnswerTitle(products, blocked) {
-    if (blocked) return "先不用商品建議";
-    if (products.length === 1) return products[0].productName || products[0].name || "商品資訊";
-    return `找到${products.length}項相關商品`;
-  }
-  function smartProductCardHeader(product, showName) {
-    return showName ? "<header><strong>" + esc(product.productName || product.name || "") + "</strong></header>" : "";
-  }
-  $("#startProductAsk").onclick = async () => {
-    const productButton = $("#startProductAsk");
-    const query = $("#smartProductQuery").value.trim();
-    if (query.length < 2) return alert("請輸入至少 2 個字的商品需求");
-    try {
-      const result = await withActionFeedback(productButton, () => api("/v1/smart-product/ask", { method:"POST", body:JSON.stringify({ query }) }), { busy:"查詢商品中…", success:"商品資料已整理" });
-      const products = Array.isArray(result.products) ? result.products : [];
-      const actions = (Array.isArray(result.actions) ? result.actions : []).filter((item) => /^https:\/\//i.test(String(item.url || "")));
-      const clarification = result.needsClarification
-        ? '<div class="card collection-empty"><strong>需要補充資訊</strong><p>' + esc(result.clarificationQuestion || "請補充商品名稱、系列、用途或想比較的規格。") + '</p></div>'
-        : "";
-      const visibleProducts = result.blocked ? [] : products;
-      const hasPendingProduct = visibleProducts.some((product) => product.reviewStatus === "pending_review");
-      const allPendingProducts = visibleProducts.length > 0 && visibleProducts.every((product) => product.reviewStatus === "pending_review");
-      const pendingCopy = "這項商品的詳細資料還在整理中，你可以先問問推薦人。";
-      const showProductNames = visibleProducts.length > 1;
-      const productCards = visibleProducts.map((product) => {
-        const pending = product.reviewStatus === "pending_review";
-        const facts = product.approvedPublicFacts?.length ? product.approvedPublicFacts.join(" ") : (product.facts || "");
-        const usageLabel = /沖泡|沖調|飲用/.test(String(product.usage || "") + String(facts || "")) ? "怎麼沖泡" : "怎麼使用";
-        if (pending) return '<article class="smart-product-item">' + smartProductCardHeader(product, showProductNames) + '</article>';
-        return '<article class="smart-product-item">' + smartProductCardHeader(product, showProductNames) + (product.size ? '<b>' + esc(product.size) + '</b>' : '') + (facts ? '<p>' + esc(facts) + '</p>' : '') + (product.ingredients ? '<details><summary>看看成分</summary><p>' + esc(product.ingredients) + '</p></details>' : '') + (product.usage ? '<details><summary>' + usageLabel + '</summary><p>' + esc(product.usage) + '</p></details>' : '') + '</article>';
-      }).join("");
-      const priceQuery = /價格|價錢|折扣|優惠|促銷|活動/.test(query);
-      const pendingHtml = hasPendingProduct ? '<p class="smart-product-pending-copy">' + pendingCopy + '</p>' : '';
-      const answerText = result.blocked || allPendingProducts ? "" : (result.answer || "目前沒有可提供的商品資料。");
-      const answerHtml = answerText ? '<p>' + esc(answerText) + '</p>' : '';
-      const visibleActions = result.blocked ? [] : (allPendingProducts ? actions.filter((action) => action.type === "line") : actions);
-      const disclaimerHtml = result.blocked || allPendingProducts ? '' : ((result.disclaimer || visibleProducts.length) ? '<small class="smart-product-disclaimer">' + (priceQuery ? "價格與活動內容請以公司最新公告為準。" : "商品資訊以官方最新公告為準。") + '</small>' : '');
-      const productAnswer = '<section class="card smart-product-answer ' + (result.blocked ? "blocked" : "") + '"><div class="smart-product-answer-head"><h2>' + smartProductAnswerTitle(visibleProducts, result.blocked) + '</h2></div>' + (result.blocked ? '<p>' + esc(result.answer || "這個問題暫時無法提供商品建議。") + '</p>' : '') + answerHtml + pendingHtml + productCards + disclaimerHtml + (visibleActions.length ? '<div class="smart-product-actions">' + visibleActions.map((action) => { const label = action.type === "line" ? "問問推薦人" : "查看官方介紹"; return '<a class="btn ' + (action.type === "line" ? "" : "alt") + '" href="' + esc(action.url) + '" target="_blank" rel="noopener">' + label + '</a>'; }).join("") + '</div>' : '') + '</section>';
-      $("#smartProductResults").innerHTML = clarification || productAnswer;
-    } catch (error) {
-      $("#smartProductResults").innerHTML = `<div class="card collection-empty">${esc(error.message || "康立商品詢問失敗")}</div>`;
+      $("#smartMatchResults").innerHTML = `<div class="card collection-empty">${esc(error.message || "智能配對失敗")}</div>`;
     }
   };
 }

@@ -1,7 +1,6 @@
 import { newId } from "./member-repository.js";
 
 const SYSTEM_LABELS = [
-  { sourceType: "company", name: "公司", color: "#0b9f57", sortOrder: 10 },
   { sourceType: "personal", name: "未分類", color: "#b65d79", sortOrder: 20 },
   { sourceType: "birthday", name: "生日", color: "#d49121", sortOrder: 30 },
 ];
@@ -169,45 +168,13 @@ async function birthdayEvents(db, userId, label, from, to) {
   return events;
 }
 
-async function companyEvents(db, label, from, to, userId) {
-  const result = await db.prepare(`
-    SELECT cs.id, cs.title, cs.starts_at, cs.ends_at, cs.attendance_mode,
-      cs.venue_name, cs.venue_address, cs.meeting_url, c.description, cr.registered_at
-    FROM course_sessions cs JOIN courses c ON c.id = cs.course_id
-    LEFT JOIN course_registrations cr ON cr.course_session_id = cs.id AND cr.platform_user_id = ? AND cr.status = 'registered'
-    WHERE c.status = 'published' AND cs.status = 'scheduled'
-      AND substr(cs.id, 1, 4) = 'mlm_'
-      AND cs.starts_at < ? AND cs.ends_at >= ?
-    ORDER BY cs.starts_at
-  `).bind(userId, to, from).all();
-  return (result.results || []).map((row) => ({
-    id: row.id,
-    sourceType: "company",
-    labelId: label.id,
-    labelName: label.name,
-    color: label.color,
-    title: row.title,
-    description: row.description || "",
-    location: row.attendance_mode === "online" ? (row.meeting_url || "線上活動") : (row.venue_name || row.venue_address || ""),
-    startsAt: row.starts_at,
-    endsAt: row.ends_at,
-    allDay: false,
-    reminderMinutes: 0,
-    recurrence: "none",
-    contactCardId: "",
-    contactName: "",
-    readonly: true,
-    registeredAt: row.registered_at || "",
-  }));
-}
-
 export async function listPersonalCalendar(db, userId, { from, to }) {
   await ensurePersonalCalendarSchema(db);
   await ensureSystemLabels(db, userId);
   const start = iso(from);
   const end = iso(to);
   const labelRows = await db.prepare("SELECT * FROM personal_calendar_labels WHERE platform_user_id = ? ORDER BY sort_order, created_at").bind(userId).all();
-  const labels = (labelRows.results || []).map(mapLabel);
+  const labels = (labelRows.results || []).map(mapLabel).filter((label) => label.sourceType !== "company");
   const privateRows = await db.prepare(`
     SELECT e.*, l.source_type, l.name AS label_name, l.color AS label_color, cc.display_name AS contact_name
     FROM personal_calendar_events e
@@ -223,10 +190,8 @@ export async function listPersonalCalendar(db, userId, { from, to }) {
     WHERE cc.scanner_user_id = ? AND cc.status = 'active'
     ORDER BY cc.display_name LIMIT 200
   `).bind(userId).all();
-  const companyLabel = labels.find((label) => label.sourceType === "company");
   const birthdayLabel = labels.find((label) => label.sourceType === "birthday");
   const events = (privateRows.results || []).map(mapPrivateEvent);
-  if (companyLabel) events.push(...await companyEvents(db, companyLabel, start, end, userId));
   if (birthdayLabel) events.push(...await birthdayEvents(db, userId, birthdayLabel, start, end));
   events.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   return {
