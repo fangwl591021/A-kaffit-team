@@ -820,9 +820,8 @@ async function home() {
   const dateText = new Intl.DateTimeFormat("zh-TW", { month:"long", day:"numeric" }).format(today);
   const indexScore = Math.min(99, 68 + Math.min(cards.length, 10) + Math.min(sessions.length, 8));
   const greeting = state.member?.displayName || `會員${String(state.member?.phone || "").slice(-4)}`;
-  layout(`<section class="ak-dashboard">
-    <header class="ak-hero"><button class="ak-bell" type="button" aria-label="通知">♢</button><h1>${esc(greeting)}，早安！</h1><p>${dateText}・今日商務中心</p></header>
-    <section class="ak-index-card"><div class="ak-meter" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><i style="--score:${indexScore}"></i></div><h2>今日商脈指數</h2><strong>${indexScore}</strong><p>狀態良好・持續累積人脈</p><b>↗ +${Math.max(1, Math.min(cards.length + sessions.length, 12))}</b>
+  layout(`<section class="member-portal ak-home-banner"><button type="button" class="portal-profile" data-home-action="profile" aria-label="開啟會員資料">${avatar()}<strong>${esc(greeting)}</strong><small>${dateText}</small></button><button type="button" class="portal-primary" data-home-action="smartMatch"><div><span>商脈指數</span><strong>${indexScore}</strong></div></button><button type="button" class="portal-primary" data-home-action="wallet"><div><span>商脈點數</span><strong>${format(wallet.balance)}</strong></div></button></section><section class="ak-dashboard">
+    <section class="ak-home-content">
       <div class="ak-stats"><article><i>●</i><span>商脈點數</span><strong>${format(wallet.balance)}</strong></article><article><i>▣</i><span>收藏名片</span><strong>${format(cards.length)}</strong></article><article><i>◇</i><span>智能配對</span><strong>開啟</strong></article><article><i>▦</i><span>近期活動</span><strong>${format(sessions.length)}</strong></article></div>
       <div class="ak-feature-grid">
         <button data-home-action="cardCollection"><i>▱</i><span>名片收藏</span></button>
