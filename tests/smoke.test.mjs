@@ -32,3 +32,13 @@ test("frontend includes onboarding and omits generation features", async () => {
   assert.match(html, /人脈推薦/);
   assert.doesNotMatch(html, /AI\s*生成|AI\s*穿戴/iu);
 });
+
+test("business card collection exposes real management actions", async () => {
+  const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  assert.match(html, /id="cardCollection"/);
+  assert.match(html, /data-card-filter="favorite"/);
+  assert.match(script, /favorite-card/);
+  assert.match(script, /edit-card/);
+  assert.match(script, /delete-card/);
+});
