@@ -571,6 +571,70 @@ function courseCheckinCompactLiffHtml(env, origin) {
 </script></body></html>`,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
 }
 
+const AKAFFIT_OFFICIAL_URL = "https://www.akaffit.com/";
+
+function officialSiteUnavailable(message = "A’kaffit 官網暫時無法載入") {
+  return new Response(`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A’kaffit</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8f3ef;color:#a6451d;font:600 16px/1.6 system-ui,sans-serif}p{padding:28px;text-align:center}</style><p>${message}</p></html>`, {
+    status: 502,
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
+async function officialAkaffitSite() {
+  let upstream;
+  try {
+    upstream = await fetch(AKAFFIT_OFFICIAL_URL, {
+      redirect: "follow",
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        "user-agent": "AkaffitTeam/1.0 (+https://akaffit-team.fangwl591021.workers.dev/)",
+      },
+    });
+  } catch (error) {
+    console.error("Akaffit official site fetch failed", error);
+    return officialSiteUnavailable();
+  }
+  if (!upstream.ok || !upstream.body) {
+    console.error("Akaffit official site returned", upstream.status);
+    return officialSiteUnavailable();
+  }
+
+  const response = new Response(upstream.body, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "public, max-age=180",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+    },
+  });
+  const hideContactStyle = ".footer_info,.floating-icon,a[href*='contact'],a[href^='tel:'],a[href^='mailto:']{display:none!important}";
+  return new HTMLRewriter()
+    .on("head", {
+      element(element) {
+        element.prepend(`<base href="${AKAFFIT_OFFICIAL_URL}" target="_blank"><style>${hideContactStyle}</style>`, { html: true });
+      },
+    })
+    .on("meta[http-equiv]", {
+      element(element) {
+        if ((element.getAttribute("http-equiv") || "").toLowerCase() === "content-security-policy") element.remove();
+      },
+    })
+    .on(".footer_info", { element(element) { element.setAttribute("hidden", "").setAttribute("style", "display:none!important"); } })
+    .on(".floating-icon", { element(element) { element.setAttribute("hidden", "").setAttribute("style", "display:none!important"); } })
+    .on("a", {
+      element(element) {
+        const href = (element.getAttribute("href") || "").trim();
+        if (/^(?:mailto:|tel:)/i.test(href) || /(?:^|\/)contact(?:[/?#]|$)/i.test(href)) {
+          element.setAttribute("hidden", "").setAttribute("style", "display:none!important");
+          return;
+        }
+        element.setAttribute("target", "_blank").setAttribute("rel", "noopener noreferrer");
+      },
+    })
+    .transform(response);
+}
+
 async function app(request, env, ctx) {
   const url = new URL(request.url);
   if(request.method==="GET"&&url.pathname==="/admin/sso"){
@@ -604,6 +668,9 @@ async function app(request, env, ctx) {
   }
   if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/official") {
     return officialTallLiffHtml(env, url.toString());
+  }
+  if (request.method === "GET" && url.pathname === "/akaffit-official") {
+    return officialAkaffitSite();
   }
   const publicCardPath = url.pathname.match(/^\/c\/([A-Za-z0-9_-]+)$/);
   if (request.method === "GET" && publicCardPath) {

@@ -12,11 +12,11 @@ test("public site uses the logo-derived A-kaffit rust theme", () => {
   assert.match(css, /\.ak-home-banner\{[^}]*var\(--ak-primary\)[^}]*var\(--ak-deep\)/);
   assert.match(css, /body:has\(\.ak-dashboard\)\{[^}]*overflow:hidden/);
   assert.match(css, /\.ak-dashboard\{[^}]*height:calc\(100svh - 112px\)[^}]*overflow:hidden/);
-  assert.match(css, /\.ak-home-content\{[^}]*height:100%;overflow-y:auto;overscroll-behavior:contain/);
+  assert.match(css, /\.ak-home-content\{[^}]*display:flex;flex-direction:column;[^}]*overflow:hidden;overscroll-behavior:contain/);
   assert.match(css, /\.ak-bottom-nav\{[^}]*var\(--ak-primary\)[^}]*var\(--ak-deep\)/);
-  assert.match(css, /\.ak-feature-grid\{[^}]*position:sticky;top:0;z-index:18/);
+  assert.match(css, /\.ak-feature-grid\{[^}]*position:relative;flex:0 0 auto;z-index:18/);
   assert.match(css, /\.ak-feature-grid button\{[^}]*color:var\(--ak-primary\)/);
-  assert.match(css, /\.ak-official-site\{[^}]*border-top:6px solid var\(--ak-soft\)/);
+  assert.match(css, /\.ak-official-import\{[^}]*flex:1;[^}]*border-top:6px solid var\(--ak-soft\)/);
   assert.doesNotMatch(css, /#003f2d|#002d21|#24e56f|#004932|#003b2c/);
-  assert.match(html, /\/akaffit-20260729-11\.css/);
+  assert.match(html, /\/akaffit-20260729-12\.css/);
 });
