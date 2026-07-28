@@ -17,6 +17,10 @@ test("home reuses the compact aiweb member banner", () => {
   assert.match(home, /專屬分享/);
   assert.match(home, /data-home-action="wallet"/);
   assert.match(home, /data-home-action="share"/);
+  assert.match(home, /id="sharePanel"/);
+  assert.match(home, /id="shareQr"/);
+  assert.match(home, /id="shareInviteUrl"/);
+  assert.match(home, /id="copyInvite"/);
   assert.doesNotMatch(home, /商脈指數/);
   assert.doesNotMatch(home, /ak-hero|ak-index-card|ak-meter/);
   assert.match(css, /\.ak-home-content\{padding:14px 18px 30px\}/);
