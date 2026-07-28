@@ -21,10 +21,7 @@ test("home exposes daily check-in and journal posts", () => {
   const features = home.slice(home.indexOf('<div class="ak-feature-grid">'), home.indexOf('</div>', home.indexOf('<div class="ak-feature-grid">')));
   assert.equal((features.match(/<button data-home-action=/g) || []).length, 8);
   assert.doesNotMatch(features, /<i>/);
-  assert.match(home, /class="ak-moment-banner"/);
-  assert.match(home, /src="\/akaffit-moment-banner\.png"/);
-  assert.ok(home.indexOf('class="ak-moment-banner"') > home.indexOf('class="ak-feature-grid"'));
-  assert.ok(home.indexOf('class="ak-moment-banner"') < home.indexOf('class="ak-official-site"'));
+  assert.doesNotMatch(home, /ak-moment-banner/);
 });
 
 test("admin exposes check-in templates and blog management", () => {
