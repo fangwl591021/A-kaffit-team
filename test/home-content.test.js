@@ -17,8 +17,10 @@ test("home exposes daily check-in and journal posts", () => {
   assert.match(home, /咖啡百科/);
   assert.doesNotMatch(home, /聯絡我們|電話|信箱|地址|service@|mailto:|tel:/);
   assert.doesNotMatch(home, />更多功能</);
+  assert.doesNotMatch(home, /class="ak-stats"/);
   const features = home.slice(home.indexOf('<div class="ak-feature-grid">'), home.indexOf('</div>', home.indexOf('<div class="ak-feature-grid">')));
   assert.equal((features.match(/<button data-home-action=/g) || []).length, 8);
+  assert.doesNotMatch(features, /<i>/);
 });
 
 test("admin exposes check-in templates and blog management", () => {
