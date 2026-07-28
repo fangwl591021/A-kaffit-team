@@ -571,6 +571,79 @@ function courseCheckinCompactLiffHtml(env, origin) {
 </script></body></html>`,{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
 }
 
+const AKAFFIT_YOUTUBE_CHANNEL_ID = "UCQWEa3bZ4hIPD7ZuTAFw4wQ";
+const AKAFFIT_YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@akaffit";
+
+async function boundedResponseText(response, maxBytes = 524288) {
+  if (!response.body) return "";
+  const declaredSize = Number(response.headers.get("content-length") || 0);
+  if (declaredSize > maxBytes) throw new Error("Upstream response is too large");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > maxBytes) {
+        await reader.cancel();
+        throw new Error("Upstream response is too large");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function decodeYoutubeXml(value = "") {
+  return String(value)
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+async function akaffitYoutubeVideos() {
+  const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${AKAFFIT_YOUTUBE_CHANNEL_ID}`;
+  try {
+    const upstream = await fetch(feedUrl, {
+      headers: { accept: "application/atom+xml,application/xml;q=0.9" },
+    });
+    if (!upstream.ok) throw new Error(`YouTube feed returned ${upstream.status}`);
+    const xml = await boundedResponseText(upstream);
+    const videos = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].slice(0, 12).map((match) => {
+      const entry = match[1];
+      const videoId = entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/)?.[1] || "";
+      const title = decodeYoutubeXml(entry.match(/<title>([\s\S]*?)<\/title>/)?.[1] || "");
+      const publishedAt = entry.match(/<published>([^<]+)<\/published>/)?.[1] || "";
+      if (!/^[A-Za-z0-9_-]{6,20}$/.test(videoId)) return null;
+      return {
+        videoId,
+        title,
+        publishedAt,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      };
+    }).filter(Boolean);
+    const response = json({
+      success: true,
+      channel: { title: "Akaffit 咖啡", url: AKAFFIT_YOUTUBE_CHANNEL_URL },
+      videos,
+    });
+    response.headers.set("cache-control", "public, max-age=300");
+    return response;
+  } catch (error) {
+    console.error("Akaffit YouTube feed failed", error);
+    return json({ success: false, error: "YouTube 頻道暫時無法載入" }, 502);
+  }
+}
+
 const AKAFFIT_OFFICIAL_URL = "https://www.akaffit.com/";
 
 function officialSiteUnavailable(message = "A’kaffit 官網暫時無法載入") {
@@ -671,6 +744,9 @@ async function app(request, env, ctx) {
   }
   if (request.method === "GET" && url.pathname === "/akaffit-official") {
     return officialAkaffitSite();
+  }
+  if (request.method === "GET" && url.pathname === "/v1/youtube/videos") {
+    return akaffitYoutubeVideos();
   }
   const publicCardPath = url.pathname.match(/^\/c\/([A-Za-z0-9_-]+)$/);
   if (request.method === "GET" && publicCardPath) {

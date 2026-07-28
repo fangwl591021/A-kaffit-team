@@ -8,9 +8,13 @@ test("home exposes daily check-in and the directly imported official site", () =
   const end = app.indexOf("async function legacyHome()", start);
   const home = app.slice(start, end);
   assert.match(home, /data-home-action="daily"/);
-  assert.match(home, /class="ak-official-import"/);
+  assert.match(home, /class="ak-official-import ak-content-panel"/);
   assert.match(home, /class="ak-official-import-frame"/);
   assert.match(home, /src="\/akaffit-official"/);
+  assert.match(home, /data-content-view="youtube">YouTube/);
+  assert.match(home, /data-content-view="official">官方網站/);
+  assert.match(home, /data-content-panel="youtube"/);
+  assert.match(home, /loadAkaffitYoutube\(\)/);
   assert.doesNotMatch(home, /\/v1\/blog\/posts\?limit=6|A-KAFFIT JOURNAL|ak-brand-story|ak-craft-section/);
   assert.doesNotMatch(home, /聯絡我們|電話|信箱|地址|service@|mailto:|tel:/);
   assert.doesNotMatch(home, />更多功能</);
