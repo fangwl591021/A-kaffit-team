@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>康立行動入口｜營運管理中心</title>
-    <link rel="stylesheet" href="/admin.css?v=20260724-7" />
+    <title>A-KAFFIT TEAM｜營運管理中心</title>
+    <link rel="stylesheet" href="/admin.css?v=20260728-8" />
   </head>
   <body>
     <div class="shell">
       <aside class="sidebar">
-        <a class="brand" href="/admin/">K-LINK 康立<span>管理中心</span></a>
+        <a class="brand" href="/admin/">A-KAFFIT TEAM<span>營運管理中心</span></a>
         <div class="admin-identity" id="adminIdentity" hidden>
           <img id="adminAvatar" alt="LINE 頭貼" />
           <div><strong id="adminName"></strong><span>目前登入管理員</span></div>
@@ -31,10 +31,13 @@
           <button class="nav-item" data-page="points">
             <span>◉</span> 點數規則
           </button>
+          <button class="nav-item" data-page="blog">
+            <span>▧</span> 網誌管理
+          </button>
           <button class="nav-item" data-page="courses" hidden>
             <span>▣</span> 課程／活動
           </button>
-          <button class="nav-item" data-page="carousel" hidden>
+          <button class="nav-item" data-page="carousel">
             <span>▤</span> 每日輪播贈點
           </button>
           <button class="nav-item" data-page="richmenu">
@@ -53,7 +56,7 @@
         <header class="topbar">
           <div>
             <h1 id="pageTitle">營運統計中心</h1>
-            <p id="pageHint">康立會員、點數與活動即時概況</p>
+            <p id="pageHint">A-KAFFIT 會員、點數、簽到與內容即時概況</p>
           </div>
           <div class="top-actions">
             <span class="health"><i></i> 系統正常</span
@@ -81,7 +84,7 @@
               <strong id="metricCourses">–</strong
               ><small>公開中的課程／活動</small>
             </article>
-            <article hidden>
+            <article>
               <p>每日簽到</p>
               <strong id="metricCheckins">–</strong
               ><small>累計有效輪播簽到</small>
@@ -101,7 +104,7 @@
               ><button data-go="courses" hidden>
                 <b>2</b><span>建立課程活動</span
                 ><small>現場或線上簽到</small></button
-              ><button data-go="carousel" hidden>
+              ><button data-go="carousel">
                 <b>3</b><span>建立輪播贈點</span
                 ><small>圖像、影片與觀看門檻</small></button
               ><a href="/" target="_blank"
@@ -287,6 +290,28 @@
           </section>
         </section>
 
+        <section class="page" data-content="blog">
+          <section class="panel blog-admin-editor">
+            <div class="panel-head"><div><h2>網誌文章</h2><p>管理會員首頁下方的最新文章與分類。</p></div><button class="secondary" id="blogNew" type="button">新增文章</button></div>
+            <form id="blogForm" class="form-grid">
+              <input id="blogId" type="hidden" />
+              <label class="wide">文章標題<input id="blogTitle" maxlength="120" required placeholder="輸入文章標題" /></label>
+              <label>分類<select id="blogCategory"></select></label>
+              <label>狀態<select id="blogStatus"><option value="draft">草稿</option><option value="published">公開</option></select></label>
+              <label class="wide">網址代稱<input id="blogSlug" maxlength="96" placeholder="留空會依標題自動產生" /></label>
+              <label class="wide">封面圖片網址<input id="blogCover" type="url" placeholder="https://..." /></label>
+              <label class="wide">文章摘要<textarea id="blogExcerpt" maxlength="320" rows="3" placeholder="首頁卡片顯示的短摘要"></textarea></label>
+              <label class="wide">文章內容<textarea id="blogContent" rows="10" placeholder="輸入完整文章內容"></textarea></label>
+              <label>排序<input id="blogSort" type="number" value="0" min="-9999" max="9999" /></label>
+              <div class="blog-form-actions"><button class="primary" id="blogSave" type="submit">儲存文章</button><button class="secondary" id="blogCancel" type="button">清除表單</button></div>
+            </form>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><div><h2>文章清單</h2><p>公開文章會出現在會員首頁；草稿僅後台可見。</p></div><button class="secondary" id="blogRefresh" type="button">重新整理</button></div>
+            <div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>文章</th><th>分類</th><th>狀態</th><th>更新時間</th><th>操作</th></tr></thead><tbody id="blogList"></tbody></table></div>
+          </section>
+        </section>
+
         <section class="page" data-content="settings">
           <section class="panel openai-settings-panel" id="openAISettingsPanel" hidden>
             <div class="panel-head">
@@ -329,6 +354,6 @@
       </section>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <script type="module" src="/admin.js?v=20260724-7"></script>
+    <script type="module" src="/admin.js?v=20260728-8"></script>
   </body>
 </html>

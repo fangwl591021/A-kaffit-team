@@ -1,4 +1,4 @@
-import {
+﻿import {
   createSession,
   sha256,
   verifyLineAccessToken,
@@ -122,6 +122,14 @@ import {
   reconcileMemberCardCollectionRewards,
   retryPendingCardCollectionRewards,
 } from "./card-collection-reward.js";
+import {
+  createBlogPost,
+  deleteBlogPost,
+  getPublishedBlogPost,
+  listAdminBlogPosts,
+  listPublishedBlogPosts,
+  updateBlogPost,
+} from "./blog.js";
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -150,7 +158,6 @@ const POINT_RULE_EVENTS = new Set([
 ]);
 
 const CANCELLED_POINT_RULE_EVENTS = [
-  'daily_ad_checkin',
   'member_joined',
   'referral_attendance_reward',
   'registration_completed',
@@ -170,10 +177,13 @@ async function ensureServicePointRules(db) {
     db.prepare(`INSERT OR IGNORE INTO point_rules
       (id,program_id,event_type,points,daily_limit,award_frequency,status,rule_version)
       VALUES ('pointrule_card_collection','program_main','card_collection_reward',10,NULL,'per_completion','active','v1')`),
+    db.prepare(`INSERT OR IGNORE INTO point_rules
+      (id,program_id,event_type,points,daily_limit,award_frequency,status,rule_version)
+      VALUES ('pointrule_default_daily_ad_checkin','program_main','daily_ad_checkin',1,NULL,'daily','active','v1')`),
     db.prepare(`UPDATE point_rules SET status='archived',updated_at=CURRENT_TIMESTAMP
       WHERE program_id='program_main' AND event_type='${LEGACY_NUMBER_SCIENCE_OTHER_EVENT}' AND status!='archived'`),
     db.prepare(`UPDATE point_rules SET status='archived',updated_at=CURRENT_TIMESTAMP
-      WHERE program_id='program_main' AND event_type IN ('daily_ad_checkin','member_joined','referral_attendance_reward','registration_completed')
+      WHERE program_id='program_main' AND event_type IN ('member_joined','referral_attendance_reward','registration_completed')
         AND status!='archived'`),
   ]);
 }
@@ -479,12 +489,12 @@ async function currentAdmin(request, env) {
 }
 
 function adminSsoSuccessHtml(sessionToken) {
-  return new Response(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>正在開啟 Klinkweb</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f8f6;color:#173429;font-family:system-ui,"Noto Sans TC",sans-serif}.box{text-align:center;padding:28px}.spinner{width:38px;height:38px;margin:0 auto 16px;border:4px solid #dcebe2;border-top-color:#08a84e;border-radius:50%;animation:s .8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}</style></head><body><div class="box"><div class="spinner"></div><b>正在以 MLM 最高權限開啟 Klinkweb…</b></div><script>history.replaceState({},"","/admin/");localStorage.setItem("klinkweb_session",${JSON.stringify(sessionToken)});location.replace("/admin/");<\/script></body></html>`,{
+  return new Response(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>正在開啟 A-KAFFIT TEAM</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f8f6;color:#173429;font-family:system-ui,"Noto Sans TC",sans-serif}.box{text-align:center;padding:28px}.spinner{width:38px;height:38px;margin:0 auto 16px;border:4px solid #dcebe2;border-top-color:#08a84e;border-radius:50%;animation:s .8s linear infinite}@keyframes s{to{transform:rotate(360deg)}}</style></head><body><div class="box"><div class="spinner"></div><b>正在以 MLM 最高權限開啟 A-KAFFIT TEAM…</b></div><script>history.replaceState({},"","/admin/");localStorage.setItem("klinkweb_session",${JSON.stringify(sessionToken)});location.replace("/admin/");<\/script></body></html>`,{
     headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","referrer-policy":"no-referrer"},
   });
 }
 function adminSsoErrorHtml(message) {
-  return new Response(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Klinkweb 權限驗證失敗</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8fafc;color:#172b4d;font-family:system-ui,"Noto Sans TC",sans-serif}.box{width:min(520px,calc(100% - 32px));padding:28px;border:1px solid #dfe7ef;border-radius:18px;background:#fff;box-shadow:0 18px 50px #172b4d18}h1{font-size:22px}p{color:#68798d;line-height:1.7}a{display:inline-block;margin-top:12px;padding:11px 16px;border-radius:10px;background:#08a84e;color:#fff;text-decoration:none;font-weight:800}</style></head><body><div class="box"><h1>無法開啟 Klinkweb</h1><p>${String(message||"驗證失敗").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}</p><a href="https://mlm.fangwl591021.workers.dev/console">返回 MLM 綜合主控台</a></div></body></html>`,{
+  return new Response(`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A-KAFFIT TEAM 權限驗證失敗</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8fafc;color:#172b4d;font-family:system-ui,"Noto Sans TC",sans-serif}.box{width:min(520px,calc(100% - 32px));padding:28px;border:1px solid #dfe7ef;border-radius:18px;background:#fff;box-shadow:0 18px 50px #172b4d18}h1{font-size:22px}p{color:#68798d;line-height:1.7}a{display:inline-block;margin-top:12px;padding:11px 16px;border-radius:10px;background:#08a84e;color:#fff;text-decoration:none;font-weight:800}</style></head><body><div class="box"><h1>無法開啟 A-KAFFIT TEAM</h1><p>${String(message||"驗證失敗").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}</p><a href="https://mlm.fangwl591021.workers.dev/console">返回 MLM 綜合主控台</a></div></body></html>`,{
     status:403,headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","referrer-policy":"no-referrer"},
   });
 }
@@ -603,6 +613,23 @@ async function app(request, env, ctx) {
   if (request.method === "GET" && sharedContactPath) {
     return Response.redirect(`${url.origin}/?sharedContact=${encodeURIComponent(sharedContactPath[1])}`, 302);
   }
+  if (request.method === "GET" && url.pathname === "/v1/blog/posts") {
+    return json({
+      success: true,
+      ...(await listPublishedBlogPosts(env.DB, {
+        category: url.searchParams.get("category") || "",
+        limit: url.searchParams.get("limit") || 12,
+      })),
+    });
+  }
+  const publicBlogMatch = url.pathname.match(/^\/v1\/blog\/posts\/([^/]+)$/);
+  if (request.method === "GET" && publicBlogMatch) {
+    const post = await getPublishedBlogPost(env.DB, decodeURIComponent(publicBlogMatch[1]));
+    return post
+      ? json({ success: true, post })
+      : json({ success: false, error: "文章不存在" }, 404);
+  }
+
   if (request.method === "GET" && (url.pathname === "/r/checkin" || url.pathname === "/r/course-checkin")) {
     // Same two-step Compact LIFF pattern as MLM:
     // QR -> LIFF -> this endpoint with liff.state -> compact verification screen.
@@ -1331,6 +1358,33 @@ async function app(request, env, ctx) {
     if (url.pathname.startsWith("/v1/admin/openai-settings") && !admin.adminAccess.systemAccess) {
       return json({ success: false, error: "只有系統權限管理員可設定 API 金鑰" }, 403);
     }
+    if (request.method === "GET" && url.pathname === "/v1/admin/blog/posts") {
+      return json({ success: true, ...(await listAdminBlogPosts(env.DB)) });
+    }
+    if (request.method === "POST" && url.pathname === "/v1/admin/blog/posts") {
+      try {
+        const post = await createBlogPost(env.DB, admin.userId, (await readJson(request)) || {});
+        return json({ success: true, post }, 201);
+      } catch (error) {
+        return badRequest(String(error?.message || "").includes("UNIQUE") ? "文章網址代稱已被使用" : error.message || "文章建立失敗");
+      }
+    }
+    const adminBlogMatch = url.pathname.match(/^\/v1\/admin\/blog\/posts\/([^/]+)$/);
+    if (request.method === "PATCH" && adminBlogMatch) {
+      try {
+        const post = await updateBlogPost(env.DB, decodeURIComponent(adminBlogMatch[1]), (await readJson(request)) || {});
+        return json({ success: true, post });
+      } catch (error) {
+        return badRequest(String(error?.message || "").includes("UNIQUE") ? "文章網址代稱已被使用" : error.message || "文章更新失敗");
+      }
+    }
+    if (request.method === "DELETE" && adminBlogMatch) {
+      try {
+        return json(await deleteBlogPost(env.DB, decodeURIComponent(adminBlogMatch[1])));
+      } catch (error) {
+        return badRequest(error.message || "文章刪除失敗");
+      }
+    }
     if (request.method === "GET" && url.pathname === "/v1/admin/openai-settings") {
       return json({ success:true, ...(await getOpenAIKeyStatus(env.DB, env.OPENAI_API_KEY)) });
     }
@@ -1808,7 +1862,7 @@ async function app(request, env, ctx) {
       const rules = await env.DB.prepare(`
         SELECT id, event_type, points, award_frequency, status, rule_version, created_at, updated_at
         FROM point_rules WHERE program_id = 'program_main'
-          AND event_type NOT IN ('daily_ad_checkin','member_joined','referral_attendance_reward','registration_completed','number_science_other_report')
+          AND event_type NOT IN ('member_joined','referral_attendance_reward','registration_completed','number_science_other_report')
         ORDER BY event_type ASC, updated_at DESC
       `).all();
       return json({ success: true, rules: rules.results || [] });

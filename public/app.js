@@ -764,7 +764,19 @@ function bindOfficialSiteLinks(){
   const links=[[document.querySelector(".klink-home-hero>a"),"home"],[document.querySelector(".klink-official-banner"),"home"],...Array.from(document.querySelectorAll(".klink-home-grid>a")).map((link,index)=>[link,["about","news","products","video"][index]])];
   links.forEach(([link,page])=>link?.addEventListener("click",(event)=>{event.preventDefault();openOfficialSite(page)}));
 }
-function bindPortalActions(){document.querySelectorAll("[data-home-action]").forEach((button)=>(button.onclick=async()=>{const action=button.dataset.homeAction;if(action==="share")return showShareQr();if(action==="aiWear")return openAiWear();if(action==="walletqr"){const panel=$("#walletPanel");if(!panel){state.tab="wallet";return render()}$(".site-home-frame")?.classList.add("hidden");panel.classList.remove("hidden");panel.scrollIntoView({behavior:"smooth",block:"start"});return showWalletQr("homeWalletQr","homeWalletExpire")}state.tab=action==="home"?"home":action==="daily"?"daily":action==="courses"?"courses":action==="profile"?"profile":action==="card"?"card":action==="zodiac"?"zodiac":action==="cardCollection"?"cardCollection":action==="smartMatch"?"smartMatch":action==="calendar"?"calendar":"wallet";await render()}));bindOfficialSiteLinks();$("#copyInvite")?.addEventListener("click",copyInvite)}
+async function openBlogPost(slug){
+  try{
+    const data=await api(`/v1/blog/posts/${encodeURIComponent(slug)}`);
+    const post=data.post;
+    const dialog=document.createElement("div");
+    dialog.className="ak-blog-dialog";
+    dialog.innerHTML=`<div class="ak-blog-backdrop" data-close-blog></div><article role="dialog" aria-modal="true" aria-label="${esc(post.title)}"><button class="ak-blog-close" data-close-blog aria-label="關閉">×</button>${post.coverImageUrl?`<img src="${esc(post.coverImageUrl)}" alt="">`:""}<small>${esc(post.category)}</small><h2>${esc(post.title)}</h2><p>${esc(post.content||post.excerpt).replace(/\n/g,"<br>")}</p></article>`;
+    dialog.querySelectorAll("[data-close-blog]").forEach((node)=>node.onclick=()=>dialog.remove());
+    document.body.append(dialog);
+  }catch(error){alert(error.message||"文章載入失敗")}
+}
+function bindBlogCards(){document.querySelectorAll("[data-blog-slug]").forEach((button)=>button.onclick=()=>openBlogPost(button.dataset.blogSlug))}
+function bindPortalActions(){document.querySelectorAll("[data-home-action]").forEach((button)=>(button.onclick=async()=>{const action=button.dataset.homeAction;if(action==="share")return showShareQr();if(action==="aiWear")return openAiWear();if(action==="walletqr"){const panel=$("#walletPanel");if(!panel){state.tab="wallet";return render()}$(".site-home-frame")?.classList.add("hidden");panel.classList.remove("hidden");panel.scrollIntoView({behavior:"smooth",block:"start"});return showWalletQr("homeWalletQr","homeWalletExpire")}state.tab=action==="home"?"home":action==="daily"?"daily":action==="courses"?"courses":action==="profile"?"profile":action==="card"?"card":action==="zodiac"?"zodiac":action==="cardCollection"?"cardCollection":action==="smartMatch"?"smartMatch":action==="calendar"?"calendar":"wallet";await render()}));bindOfficialSiteLinks();bindBlogCards();$("#copyInvite")?.addEventListener("click",copyInvite)}
 async function mlmMemberPointBalance(fallbackBalance=0){
   try{
     mlmPointSyncError="";
@@ -812,18 +824,22 @@ async function home() {
     api("/v1/points/wallet"),
     api("/v1/card-collection"),
     api("/v1/courses"),
+    api("/v1/blog/posts?limit=6"),
   ]);
   const wallet = results[0].status === "fulfilled" ? results[0].value.wallet : { balance:0 };
   const cards = results[1].status === "fulfilled" ? (results[1].value.cards || []) : [];
   const sessions = results[2].status === "fulfilled" ? (results[2].value.sessions || results[2].value.courses || []) : [];
+  const posts = results[3].status === "fulfilled" ? (results[3].value.posts || []) : [];
   const today = new Date();
   const dateText = new Intl.DateTimeFormat("zh-TW", { month:"long", day:"numeric" }).format(today);
   const indexScore = Math.min(99, 68 + Math.min(cards.length, 10) + Math.min(sessions.length, 8));
   const greeting = state.member?.displayName || `會員${String(state.member?.phone || "").slice(-4)}`;
+  const blogCards = posts.map((post)=>`<button type="button" class="ak-blog-card" data-blog-slug="${esc(post.slug)}">${post.coverImageUrl?`<img src="${esc(post.coverImageUrl)}" alt="">`:`<span class="ak-blog-cover">${esc(post.category.slice(0,2))}</span>`}<small>${esc(post.category)}</small><strong>${esc(post.title)}</strong><p>${esc(post.excerpt)}</p><i>閱讀文章 →</i></button>`).join("");
   layout(`<section class="member-portal ak-home-banner"><button type="button" class="portal-profile" data-home-action="profile" aria-label="開啟會員資料">${avatar()}<strong>${esc(greeting)}</strong><small>${dateText}</small></button><button type="button" class="portal-primary" data-home-action="smartMatch"><div><span>商脈指數</span><strong>${indexScore}</strong></div></button><button type="button" class="portal-primary" data-home-action="wallet"><div><span>商脈點數</span><strong>${format(wallet.balance)}</strong></div></button></section><section class="ak-dashboard">
     <section class="ak-home-content">
       <div class="ak-stats"><article><i>●</i><span>商脈點數</span><strong>${format(wallet.balance)}</strong></article><article><i>▣</i><span>收藏名片</span><strong>${format(cards.length)}</strong></article><article><i>◇</i><span>智能配對</span><strong>開啟</strong></article><article><i>▦</i><span>近期活動</span><strong>${format(sessions.length)}</strong></article></div>
       <div class="ak-feature-grid">
+        <button data-home-action="daily"><i>✓</i><span>每日簽到</span></button>
         <button data-home-action="cardCollection"><i>▱</i><span>名片收藏</span></button>
         <button data-home-action="smartMatch"><i>♧</i><span>智能配對</span></button>
         <button data-home-action="card"><i>▤</i><span>我的名片</span></button>
@@ -833,6 +849,7 @@ async function home() {
         <button data-home-action="wallet"><i>▰</i><span>商脈錢包</span></button>
         <button data-home-action="profile"><i>⌘</i><span>更多功能</span></button>
       </div>
+      ${blogCards?`<section class="ak-blog"><header><div><small>A-KAFFIT JOURNAL</small><h2>最新文章</h2></div><span>觀點・活動・商脈</span></header><div class="ak-blog-grid">${blogCards}</div></section>`:""}
     </section>
     <nav class="ak-bottom-nav" aria-label="主要導覽"><button class="active" data-home-action="home"><i>⌂</i><span>首頁</span></button><button data-home-action="cardCollection"><i>♧</i><span>人脈</span></button><button data-home-action="smartMatch"><i>↗</i><span>洞察</span></button><button data-home-action="profile"><i>●</i><span>我的</span></button></nav>
   </section>`);
@@ -1185,7 +1202,7 @@ function cardFlex(card) {
   ].filter(Boolean).join("\n");
   const serviceAlign = ({ left:"start", center:"center", right:"end" })[card.descriptionTextAlign || card.serviceTextAlign] || "start";
   const bodyContents = [
-    { type:"text", text:card.versionTitle || card.displayName || "K-LINK 康立 會員", weight:"bold", size:"xl", color:"#2A2030", align:"center", wrap:true },
+    { type:"text", text:card.versionTitle || card.displayName || "A-KAFFIT TEAM 會員", weight:"bold", size:"xl", color:"#2A2030", align:"center", wrap:true },
     ...(card.englishName ? [{ type:"text", text:card.englishName, size:"sm", color:"#857581", margin:"sm", align:"center", wrap:true }] : []),
     ...(metaFields ? [{ type:"text", text:metaFields, size:"sm", color:"#5E5260", align:"center", wrap:true, margin:"md", maxLines:2 }] : []),
     ...(card.serviceDescription ? [{ type:"text", text:card.serviceDescription, size:"sm", color:"#5E5260", align:serviceAlign, wrap:true, margin:"md", maxLines:4 }] : []),
@@ -1510,14 +1527,14 @@ function bindCardButtonEditor(onChange = null) {
 function renderDigitalCardPreview(card, selected) {
   const holder = $("#cardLivePreview"); if (!holder) return;
   const coverUrl = $("#cardVersionCover")?.value.trim() || "";
-  const title = $("#cardVersionTitle")?.value.trim() || card.displayName || "K-LINK 康立 會員";
+  const title = $("#cardVersionTitle")?.value.trim() || card.displayName || "A-KAFFIT TEAM 會員";
   const description = $("#cardVersionDescription")?.value.trim() || card.serviceDescription || "";
   const buttons = collectCardButtons();
   holder.className = `ecard-preview-card ${esc(selected.className)}`;
   holder.innerHTML = `${coverUrl ? `<img src="${esc(coverUrl)}" alt="名片封面">` : `<div class="ecard-cover-placeholder">${avatar()}</div>`}<div class="ecard-preview-copy"><strong>${esc(title)}</strong><span>${esc(description)}</span></div>${buttons.length ? `<div class="ecard-preview-buttons">${buttons.slice(0,4).map((button) => `<span style="--button-color:${esc(button.color || "#B96072")}">${esc(button.label || "按鈕")}</span>`).join("")}</div>` : ""}`;
 }
 // Ported from LINE-/index.html + js/modules/mycard.js: the editor is deliberately
-// kept as its own source-shaped block, with only storage calls adapted to K-LINK 康立.
+// kept as its own source-shaped block, with only storage calls adapted to A-KAFFIT TEAM.
 function lineSourceEcardEditor(card, selected, options = {}) {
   const version = cardWithVersion(card, selected.id);
   const shareTools = options.collection

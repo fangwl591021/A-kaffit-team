@@ -1,0 +1,21 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+test("home exposes daily check-in and journal posts", () => {
+  const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+  const start = app.indexOf("async function home()");
+  const end = app.indexOf("async function legacyHome()", start);
+  const home = app.slice(start, end);
+  assert.match(home, /data-home-action="daily"/);
+  assert.match(home, /\/v1\/blog\/posts\?limit=6/);
+  assert.match(home, /A-KAFFIT JOURNAL/);
+});
+
+test("admin exposes check-in templates and blog management", () => {
+  const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  assert.match(html, /data-page="carousel"(?! hidden)/);
+  assert.match(html, /簽到贈點活動目錄/);
+  assert.match(html, /data-page="blog"/);
+  assert.match(html, /data-content="blog"/);
+});
