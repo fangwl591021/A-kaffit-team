@@ -11,6 +11,7 @@ test("home switches to the requested A’kaffit Facebook Page Plugin", () => {
   assert.match(app, /data-content-panel="facebook"/);
   assert.match(app, /facebook\.com\/plugins\/page\.php\?href=/);
   assert.match(app, /61565353201161/);
-  assert.match(app, /https:\/\/facebook\.com\/QR\?id=61565353201161/);
-  assert.match(css, /\.ak-facebook-frame\{[^}]*max-width:500px/);
+  assert.doesNotMatch(app, /ak-facebook-fallback/);
+  assert.match(css, /\.ak-facebook-panel,\.ak-instagram-panel\{[^}]*padding:0/);
+  assert.match(css, /\.ak-facebook-frame,\.ak-instagram-frame\{[^}]*width:100%[^}]*max-width:none[^}]*height:100%/);
 });

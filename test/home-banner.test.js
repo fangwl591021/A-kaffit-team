@@ -17,6 +17,8 @@ test("home reuses the compact aiweb member banner", () => {
   assert.match(home, /專屬分享/);
   assert.match(home, /data-home-action="wallet"/);
   assert.match(home, /data-home-action="share"/);
+  assert.match(home, /<span>專屬分享<\/span>/);
+  assert.doesNotMatch(home, /專屬分享<\/span><strong>分享<\/strong>/);
   assert.match(home, /id="sharePanel"/);
   assert.match(home, /id="shareQr"/);
   assert.match(home, /id="shareInviteUrl"/);
