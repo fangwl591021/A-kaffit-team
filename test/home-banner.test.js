@@ -13,13 +13,14 @@ test("home reuses the compact aiweb member banner", () => {
 
   assert.match(home, /member-portal ak-home-banner/);
   assert.match(home, /class="ak-home-avatar"[\s\S]*\$\{avatar\(\)\}/);
+  assert.match(home, /會員專區/);
   assert.doesNotMatch(home, /dateText|greeting/);
   assert.match(home, /有點開心/);
   assert.doesNotMatch(home, /商脈點數/);
   assert.match(home, /專屬分享/);
   assert.match(home, /data-home-action="wallet"/);
   assert.match(home, /data-home-action="share"/);
-  assert.match(home, /<span>專屬分享<\/span>/);
+  assert.match(home, /<span class="ak-home-label">專屬分享<\/span>/);
   assert.doesNotMatch(home, /專屬分享<\/span><strong>分享<\/strong>/);
   assert.match(home, /id="sharePanel"/);
   assert.match(home, /id="shareQr"/);

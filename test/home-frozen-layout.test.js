@@ -20,7 +20,10 @@ test("home compacts its banner and freezes feature plus social navigation", () =
   assert.match(css, /\.ak-home-banner \.portal-primary\{min-height:75px/);
   assert.match(css, /\.ak-frozen-nav\{[^}]*flex:0 0 auto/);
   assert.match(css, /\.ak-home-banner\{grid-template-columns:\.72fr repeat\(3,1fr\)\}/);
-  assert.match(css, /\.ak-home-avatar \.avatar\{width:46px;height:46px/);
+  assert.match(home, /\$\{avatar\(\)\}<span class="ak-home-label">會員專區<\/span>/);
+  assert.match(css, /\.ak-home-avatar \.avatar\{width:38px;height:38px/);
+  assert.match(css, /\.ak-zodiac-entry\{display:flex;flex-direction:column;gap:3px/);
+  assert.match(css, /\.ak-share-entry\{display:flex;flex-direction:column;gap:3px/);
   assert.match(css, /\.ak-frozen-nav \.ak-feature-grid button\{min-height:40px/);
   assert.match(css, /\.ak-frozen-nav \.ak-content-tabs button\{min-height:36px/);
 });
