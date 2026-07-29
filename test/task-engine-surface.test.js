@@ -34,7 +34,16 @@ test("Task Engine migration preserves history and backfills existing card CRM ta
 });
 test("LINE OA remains available in the backend but is dormant and hidden", () => {
   assert.doesNotMatch(app, /taskLineEnabled|使用 LINE Push|LINE Push 可用/);
+  assert.match(app, /lineEnabled:channel\.lineEnabled===true/);
   assert.match(taskEngine, /async function pushLine/);
   assert.match(taskEngine, /lineEnabled:false/);
   assert.match(taskEngine, /body\.lineEnabled === true/);
+});
+test("Task center includes the complete aiweb-style overview and Telegram guidance", () => {
+  assert.match(app, /taskOverviewMarkup/);
+  assert.match(app, /今日到期/);
+  assert.match(app, /task-loop/);
+  assert.match(app, /Telegram Chat ID 設定/);
+  assert.match(app, /taskTelegramHelpDialog/);
+  assert.match(app, /aria-expanded/);
 });
