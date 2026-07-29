@@ -4,6 +4,16 @@ export function newId(prefix) {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
 }
 
+export async function resolveCanonicalMemberId(db, userId) {
+  const row = await db.prepare(`
+    SELECT canonical_user_id
+    FROM member_account_aliases
+    WHERE alias_user_id = ?
+    LIMIT 1
+  `).bind(userId).first();
+  return row?.canonical_user_id || userId;
+}
+
 const MEMBER_NUMBER_DIGITS = '012356789';
 const MEMBER_NUMBER_WIDTH = 8;
 const MEMBER_NUMBER_LIMIT = (MEMBER_NUMBER_DIGITS.length ** MEMBER_NUMBER_WIDTH) - 1;
@@ -131,8 +141,16 @@ export async function resolveLineMember(db, lineProfile, inviteToken = '') {
 export function normalizeBirthday(rawBirthday) {
   const raw = String(rawBirthday || '').trim();
   const digits = raw.replace(/-/g, '');
-  if (!/^\d{8}$/.test(digits)) throw new Error('生日請輸入 8 位西元數字，例如 17901021');
-  const birthday = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  let gregorianDigits = digits;
+  if (/^\d{6,7}$/.test(digits)) {
+    const yearDigits = digits.length - 4;
+    const rocYear = Number(digits.slice(0, yearDigits));
+    if (!Number.isInteger(rocYear) || rocYear < 1) throw new Error('生日密碼請輸入民國年月日，例如 591021、390305');
+    gregorianDigits = `${rocYear + 1911}${digits.slice(yearDigits)}`;
+  } else if (!/^\d{8}$/.test(digits)) {
+    throw new Error('生日密碼請輸入民國年月日，例如 591021、390305');
+  }
+  const birthday = `${gregorianDigits.slice(0, 4)}-${gregorianDigits.slice(4, 6)}-${gregorianDigits.slice(6, 8)}`;
   const parsedBirthday = new Date(`${birthday}T00:00:00Z`);
   if (Number.isNaN(parsedBirthday.getTime()) || parsedBirthday.toISOString().slice(0, 10) !== birthday || parsedBirthday > new Date()) {
     throw new Error('生日日期無效');
@@ -146,10 +164,23 @@ export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, invi
   if (!/^(?:\+886|0)9\d{8}$/.test(phone)) throw new Error('請輸入正確的台灣手機號碼');
   const normalizedPhone = phone.startsWith('+886') ? `0${phone.slice(4)}` : phone;
   const subject = await sha256(`${normalizedPhone}|${birthday}`);
-  const existing = await db.prepare(`
-    SELECT ei.platform_user_id AS user_id FROM external_identities ei
+  let existing = await db.prepare(`
+    SELECT COALESCE(maa.canonical_user_id, ei.platform_user_id) AS user_id
+    FROM external_identities ei
+    LEFT JOIN member_account_aliases maa ON maa.alias_user_id = ei.platform_user_id
     WHERE ei.provider = 'phone_birthday' AND ei.provider_subject = ? AND ei.verification_status = 'verified'
   `).bind(subject).first();
+  if (!existing?.user_id) {
+    existing = await db.prepare(`
+      SELECT COALESCE(maa.canonical_user_id, mp.platform_user_id) AS user_id
+      FROM member_profiles mp
+      JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'
+      LEFT JOIN member_account_aliases maa ON maa.alias_user_id = mp.platform_user_id
+      WHERE mp.phone = ? AND mp.birthday = ?
+      ORDER BY pu.created_at ASC
+      LIMIT 1
+    `).bind(normalizedPhone, birthday).first();
+  }
   if (existing?.user_id) {
     await db.prepare('UPDATE external_identities SET last_verified_at = CURRENT_TIMESTAMP WHERE provider = ? AND provider_subject = ?')
       .bind('phone_birthday', subject).run();

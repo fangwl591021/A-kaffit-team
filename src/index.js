@@ -13,6 +13,7 @@ import {
   getAdminAccess,
   getMember,
   newId,
+  resolveCanonicalMemberId,
   resolvePhoneBirthdayMember,
   resolveLineMember,
   updateMemberProfile,
@@ -358,7 +359,10 @@ async function currentMember(request, env) {
   ].filter(Boolean);
   for (const token of new Set(tokens)) {
     const session = await verifySession(token, env.SESSION_SIGNING_SECRET);
-    if (session) return getMember(env.DB, session.sub);
+    if (session) {
+      const canonicalUserId = await resolveCanonicalMemberId(env.DB, session.sub);
+      return getMember(env.DB, canonicalUserId);
+    }
   }
   return null;
 }
