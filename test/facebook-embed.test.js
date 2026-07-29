@@ -13,5 +13,6 @@ test("home switches to the requested A’kaffit Facebook Page Plugin", () => {
   assert.match(app, /61565353201161/);
   assert.doesNotMatch(app, /ak-facebook-fallback/);
   assert.match(css, /\.ak-facebook-panel,\.ak-instagram-panel\{[^}]*padding:0/);
-  assert.match(css, /\.ak-facebook-frame,\.ak-instagram-frame\{[^}]*width:100%[^}]*max-width:none[^}]*height:100%/);
+  assert.match(css, /\.ak-facebook-frame,\.ak-instagram-frame\{[^}]*width:100%[^}]*max-width:none/);
+  assert.match(css, /\.ak-facebook-frame\{height:100%/);
 });

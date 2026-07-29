@@ -6,9 +6,12 @@ const source = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "u
 
 test("home embeds the official A’kaffit Instagram profile", () => {
   const app = source("public/app.js");
+  const css = source("public/akaffit.css");
   assert.match(app, /data-content-view="instagram">Instagram/);
   assert.match(app, /data-content-panel="instagram"/);
   assert.match(app, /https:\/\/www\.instagram\.com\/akaffit\/embed\//);
   assert.match(app, /class="ak-instagram-frame"/);
+  assert.match(css, /\.ak-instagram-panel\{[^}]*overflow-y:auto;[^}]*-webkit-overflow-scrolling:touch;[^}]*touch-action:pan-y/);
+  assert.match(css, /\.ak-instagram-frame\{height:1600px;min-height:100%/);
   assert.doesNotMatch(app, /src="https:\/\/www\.instagram\.com\/akaffit\/" loading=/);
 });
