@@ -131,9 +131,15 @@ import {
   dispatchDueTaskPushes,
   dispatchTaskPush,
   generateNextTask,
+  getTaskTelegramBotToken,
   listTasks,
   saveTaskChannels,
 } from "./task-engine.js";
+import {
+  discoverTelegramPrivateChat,
+  sendTelegramTaskTest,
+} from "./telegram-task-notifications.js";
+import { normalizeTelegramBotToken } from "./telegram-token-crypto.js";
 import {
   findCachedSmartMatch,
   listContactSmartMatchHistory,
@@ -1089,7 +1095,10 @@ async function app(request, env, ctx) {
     try {
       const data=await listTasks(env.DB, member.userId, { status:url.searchParams.get("status") || "", limit:url.searchParams.get("limit") || 100 });
       const lineToken=env.LINE_CHANNEL_ACCESS_TOKEN || await getLineAccessToken(env.DB,env.SESSION_SIGNING_SECRET);
-      return json({ success:true, ...data, pushCapabilities:{ lineConfigured:Boolean(lineToken), telegramConfigured:Boolean(env.TELEGRAM_BOT_TOKEN) } });
+      return json({ success:true, ...data, pushCapabilities:{
+        lineConfigured:Boolean(lineToken),
+        telegramConfigured:Boolean(data.channel?.telegramBotConfigured || env.TELEGRAM_BOT_TOKEN),
+      } });
     }
     catch (error) { return json({ success:false, error:error.message || "任務中心讀取失敗" }, 400); }
   }
@@ -1109,8 +1118,39 @@ async function app(request, env, ctx) {
   if (url.pathname === "/v1/tasks/channels" && request.method === "PUT") {
     const member = await currentMember(request, env);
     if (!member) return json({ success:false, error:"Unauthorized" }, 401);
-    try { return json({ success:true, channel:await saveTaskChannels(env.DB, member.userId, (await readJson(request)) || {}) }); }
+    try {
+      return json({ success:true, channel:await saveTaskChannels(
+        env.DB,
+        member.userId,
+        (await readJson(request)) || {},
+        env.SESSION_SIGNING_SECRET,
+      ) });
+    }
     catch (error) { return json({ success:false, error:error.message || "推播設定儲存失敗" }, 400); }
+  }
+  if (url.pathname === "/v1/tasks/channels/discover" && request.method === "POST") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      const body=(await readJson(request)) || {};
+      const token=normalizeTelegramBotToken(body.telegramBotToken)
+        || await getTaskTelegramBotToken(env.DB,member.userId,env.SESSION_SIGNING_SECRET);
+      return json({ success:true, ...(await discoverTelegramPrivateChat(token)) });
+    } catch (error) {
+      return json({ success:false, error:error.message || "Telegram Chat ID 取得失敗" }, 400);
+    }
+  }
+  if (url.pathname === "/v1/tasks/channels/test" && request.method === "POST") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      const body=(await readJson(request)) || {};
+      const token=normalizeTelegramBotToken(body.telegramBotToken)
+        || await getTaskTelegramBotToken(env.DB,member.userId,env.SESSION_SIGNING_SECRET);
+      return json({ success:true, ...(await sendTelegramTaskTest(token,body.telegramChatId)) });
+    } catch (error) {
+      return json({ success:false, error:error.message || "Telegram 測試失敗" }, 400);
+    }
   }
   const taskActionMatch = url.pathname.match(/^\/v1\/tasks\/([^/]+)\/action$/);
   if (taskActionMatch && request.method === "PATCH") {

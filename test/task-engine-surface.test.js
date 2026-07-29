@@ -6,6 +6,7 @@ const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const worker = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 const taskEngine = readFileSync(new URL("../src/task-engine.js", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../migrations/0042_ai_task_engine.sql", import.meta.url), "utf8");
+const telegramMigration = readFileSync(new URL("../migrations/0043_member_task_telegram_token.sql", import.meta.url), "utf8");
 
 test("Task Engine is reachable from home and supports the complete feedback loop", () => {
   assert.match(app, /data-home-action="tasks"><span>AI 任務/);
@@ -43,7 +44,20 @@ test("Task center includes the complete aiweb-style overview and Telegram guidan
   assert.match(app, /taskOverviewMarkup/);
   assert.match(app, /今日到期/);
   assert.match(app, /task-loop/);
-  assert.match(app, /Telegram Chat ID 設定/);
+  assert.match(app, /Telegram 個人推播設定/);
   assert.match(app, /taskTelegramHelpDialog/);
   assert.match(app, /aria-expanded/);
+});
+test("members can securely configure their own Telegram Bot Token", () => {
+  assert.match(app, /id="taskTelegramBotToken"/);
+  assert.match(app, /id="taskTelegramDetect"/);
+  assert.match(app, /id="taskTelegramTest"/);
+  assert.match(app, /每位會員使用自己的 Telegram Bot/);
+  assert.match(worker, /\/v1\/tasks\/channels\/discover/);
+  assert.match(worker, /\/v1\/tasks\/channels\/test/);
+  assert.match(taskEngine, /telegram_bot_token_encrypted/);
+  assert.match(taskEngine, /encryptTelegramBotToken/);
+  assert.match(telegramMigration, /telegram_bot_token_encrypted/);
+  assert.match(telegramMigration, /telegram_bot_token_last4/);
+  assert.doesNotMatch(app, /telegram_bot_token_encrypted/);
 });

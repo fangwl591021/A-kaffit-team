@@ -1,4 +1,10 @@
 import { newId } from "./member-repository.js";
+import {
+  decryptTelegramBotToken,
+  encryptTelegramBotToken,
+  isValidTelegramBotToken,
+  normalizeTelegramBotToken,
+} from "./telegram-token-crypto.js";
 
 const TASK_STATUSES = new Set(["pending", "completed", "postponed", "cancelled"]);
 const TASK_PRIORITIES = new Set(["low", "normal", "high"]);
@@ -193,26 +199,53 @@ export async function getTaskChannels(db, userId) {
     lineEnabled: Boolean(row.line_enabled),
     telegramEnabled: Boolean(row.telegram_enabled),
     telegramChatId: row.telegram_chat_id || "",
+    telegramBotConfigured: Boolean(row.telegram_bot_token_encrypted),
+    telegramBotTokenLast4: row.telegram_bot_token_last4 || "",
   };
   const identity = await db.prepare(`SELECT 1 AS ok FROM external_identities
     WHERE (platform_user_id=? OR platform_user_id IN (
       SELECT alias_user_id FROM member_account_aliases WHERE canonical_user_id=?
     )) AND provider='line_login' AND verification_status='verified' LIMIT 1`).bind(userId, userId).first();
-  return { lineLinked:Boolean(identity), lineEnabled:false, telegramEnabled:false, telegramChatId:"" };
+  return { lineLinked:Boolean(identity), lineEnabled:false, telegramEnabled:false, telegramChatId:"", telegramBotConfigured:false, telegramBotTokenLast4:"" };
 }
 
-export async function saveTaskChannels(db, userId, body = {}) {
+export async function saveTaskChannels(db, userId, body = {}, encryptionSecret = "") {
   const telegramChatId = text(body.telegramChatId, 100);
+  const telegramBotToken = normalizeTelegramBotToken(body.telegramBotToken);
   const lineEnabled = body.lineEnabled === true ? 1 : 0;
-  const telegramEnabled = body.telegramEnabled === true && telegramChatId ? 1 : 0;
+  const current = await db.prepare(`SELECT telegram_bot_token_encrypted,telegram_bot_token_last4
+    FROM member_task_channels WHERE platform_user_id=?`).bind(userId).first();
+  if (telegramBotToken && !isValidTelegramBotToken(telegramBotToken)) throw new Error("Telegram Bot Token 格式錯誤");
+  const telegramBotTokenEncrypted = telegramBotToken
+    ? await encryptTelegramBotToken(telegramBotToken, encryptionSecret)
+    : current?.telegram_bot_token_encrypted || "";
+  const telegramBotTokenLast4 = telegramBotToken
+    ? telegramBotToken.slice(-4)
+    : current?.telegram_bot_token_last4 || "";
+  if (body.telegramEnabled === true && !telegramChatId) throw new Error("啟用 Telegram 推播前請填寫 Chat ID");
+  if (body.telegramEnabled === true && !telegramBotTokenEncrypted) throw new Error("啟用 Telegram 推播前請填寫 Bot Token");
+  const telegramEnabled = body.telegramEnabled === true ? 1 : 0;
   await db.prepare(`INSERT INTO member_task_channels
-    (platform_user_id,telegram_chat_id,line_enabled,telegram_enabled,updated_at)
-    VALUES (?,?,?,?,CURRENT_TIMESTAMP)
+    (platform_user_id,telegram_chat_id,line_enabled,telegram_enabled,
+      telegram_bot_token_encrypted,telegram_bot_token_last4,updated_at)
+    VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
     ON CONFLICT(platform_user_id) DO UPDATE SET telegram_chat_id=excluded.telegram_chat_id,
       line_enabled=excluded.line_enabled,telegram_enabled=excluded.telegram_enabled,
+      telegram_bot_token_encrypted=excluded.telegram_bot_token_encrypted,
+      telegram_bot_token_last4=excluded.telegram_bot_token_last4,
       updated_at=CURRENT_TIMESTAMP`)
-    .bind(userId, telegramChatId, lineEnabled, telegramEnabled).run();
+    .bind(userId, telegramChatId, lineEnabled, telegramEnabled,
+      telegramBotTokenEncrypted, telegramBotTokenLast4).run();
   return getTaskChannels(db, userId);
+}
+
+export async function getTaskTelegramBotToken(db, userId, encryptionSecret, fallbackToken = "") {
+  const row = await db.prepare(`SELECT telegram_bot_token_encrypted
+    FROM member_task_channels WHERE platform_user_id=?`).bind(userId).first();
+  if (row?.telegram_bot_token_encrypted) {
+    return decryptTelegramBotToken(row.telegram_bot_token_encrypted, encryptionSecret);
+  }
+  return normalizeTelegramBotToken(fallbackToken);
 }
 
 function outputText(result = {}) {
@@ -369,12 +402,18 @@ async function pushTelegram(db, env, task, channel) {
   const key = `task:${task.id}:telegram:${task.due_at}`;
   const sent = await db.prepare("SELECT id FROM ai_task_deliveries WHERE idempotency_key=?").bind(key).first();
   if (sent) return { channel:"telegram", status:"duplicate" };
-  if (!channel.telegramEnabled || !channel.telegramChatId || !env.TELEGRAM_BOT_TOKEN) {
+  const telegramBotToken = await getTaskTelegramBotToken(
+    db,
+    task.platform_user_id,
+    env.SESSION_SIGNING_SECRET,
+    env.TELEGRAM_BOT_TOKEN,
+  );
+  if (!channel.telegramEnabled || !channel.telegramChatId || !telegramBotToken) {
     const reason = !channel.telegramEnabled || !channel.telegramChatId ? "Telegram 尚未啟用" : "Telegram Bot 憑證尚未設定";
     await recordDelivery(db, task, "telegram", "skipped", key, reason);
     return { channel:"telegram", status:"skipped", error:reason };
   }
-  const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+  const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
     method:"POST",
     headers:{"content-type":"application/json"},
     body:JSON.stringify({
