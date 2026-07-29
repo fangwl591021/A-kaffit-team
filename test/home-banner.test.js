@@ -22,7 +22,8 @@ test("home member summary preserves profile, wallet, and exclusive sharing actio
   assert.match(home, /id="copyInvite"/);
   assert.doesNotMatch(home, /商脈指數|商脈點數|ak-hero|ak-index-card|ak-meter/);
   assert.match(css, /\.ak-member-summary\{[^}]*background:var\(--ak-cream\)/);
-  assert.match(css, /\.ak-member-actions\{display:grid;grid-template-columns:1fr 1fr/);
+  assert.match(css, /\.ak-member-actions\{display:grid;grid-template-columns:repeat\(3/);
+  assert.match(home, /class="ak-profile-card" data-home-action="profile"[\s\S]*<span>我的<\/span>/);
 });
 
 test("greeting follows morning, afternoon, and evening periods", () => {

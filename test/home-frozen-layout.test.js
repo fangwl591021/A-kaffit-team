@@ -19,12 +19,13 @@ test("home uses a compact member summary, shared task toggle, and social-first v
   assert.match(home, /class="ak-point-card" data-home-action="wallet"/);
   assert.match(home, /class="ak-qr-card" data-home-action="share"/);
   assert.match(home, /id="homeTaskDetail"[\s\S]*data-home-action="tasks">查看全部任務/);
-  assert.match(home, /class="ak-frozen-nav"[\s\S]*class="ak-feature-grid"[\s\S]*class="ak-content-tabs"/);
+  assert.match(home, /class="ak-frozen-nav"[\s\S]*class="ak-feature-grid"[\s\S]*data-content-panel="academy"[\s\S]*class="ak-content-tabs"/);
+  assert.doesNotMatch(home, /class="ak-bottom-nav"/);
   assert.match(css, /\.ak-home-task-detail\{max-height:232px/);
   assert.match(css, /\.ak-home-task-list\{max-height:172px;[^}]*overflow-y:auto/);
   assert.match(css, /\.ak-frozen-nav \.ak-feature-grid\{[^}]*grid-template-columns:repeat\(5/);
   assert.match(css, /\.ak-frozen-nav \.ak-feature-grid button\{[^}]*min-height:62px/);
-  assert.match(css, /\.ak-frozen-nav \.ak-content-tabs button\{[^}]*min-height:45px/);
+  assert.match(css, /\.ak-home-content>\.ak-content-tabs button\{[^}]*min-height:45px/);
   assert.match(css, /\.ak-instagram-panel\{[^}]*overflow-y:auto/);
 });
 

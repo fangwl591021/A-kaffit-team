@@ -15,12 +15,12 @@ test("public site uses the coffee-inspired A-kaffit rust theme", () => {
   assert.match(css, /--ak-soft:#f9e9df/);
   assert.match(css, /--ak-ink:#3d2920/);
   assert.match(css, /main#app:has\(\.ak-dashboard\)\{height:100svh;min-height:100svh;max-height:100svh;overflow:hidden/);
-  assert.match(css, /\.ak-dashboard\{[^}]*grid-template-rows:auto auto minmax\(0,1fr\) auto;[^}]*height:100svh;[^}]*overflow:hidden/);
+  assert.match(css, /\.ak-dashboard\{[^}]*grid-template-rows:auto auto minmax\(0,1fr\);[^}]*height:100svh;[^}]*overflow:hidden/);
   assert.match(css, /\.ak-home-content\{[^}]*display:flex;flex-direction:column;[^}]*min-height:0;[^}]*overflow:hidden/);
   assert.match(css, /\.ak-content-panel\{[^}]*flex:1 1 auto;[^}]*min-height:0/);
-  assert.match(css, /\.ak-bottom-nav\{[^}]*safe-area-inset-bottom/);
-  assert.match(css, /\.ak-frozen-nav \.ak-content-tabs\{[^}]*grid-template-columns:repeat\(5/);
+  assert.match(css, /\.ak-home-content>\.ak-content-tabs\{[^}]*safe-area-inset-bottom/);
+  assert.match(css, /\.ak-home-content>\.ak-content-tabs\{[^}]*grid-template-columns:repeat\(5/);
   assert.doesNotMatch(css, /#003f2d|#002d21|#24e56f|#004932|#003b2c/);
-  assert.match(html, /\/akaffit-20260729-24\.css/);
-  assert.match(html, /\/app-20260729-92\.js/);
+  assert.match(html, /\/akaffit-20260729-25\.css/);
+  assert.match(html, /\/app-20260729-93\.js/);
 });
