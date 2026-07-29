@@ -7,7 +7,9 @@ test("home exposes daily check-in and the directly imported official site", () =
   const start = app.indexOf("async function home()");
   const end = app.indexOf("async function legacyHome()", start);
   const home = app.slice(start, end);
-  assert.match(home, /data-home-action="daily"/);
+  assert.match(home, /data-home-inline="daily" aria-pressed="false"/);
+  assert.match(home, /id="homeDailyPanel" class="ak-daily-panel ak-content-panel hidden" data-content-panel="daily"/);
+  assert.match(home, /await daily\("#homeDailyPanel"\)/);
   assert.match(home, /class="ak-official-import ak-content-panel"/);
   assert.match(home, /class="ak-official-import-frame"/);
   assert.match(home, /src="\/akaffit-official"/);
@@ -26,8 +28,8 @@ test("home exposes daily check-in and the directly imported official site", () =
   assert.doesNotMatch(home, />更多功能</);
   assert.doesNotMatch(home, /class="ak-stats"/);
   const features = home.slice(home.indexOf('<div class="ak-feature-grid">'), home.indexOf('</div>', home.indexOf('<div class="ak-feature-grid">')));
-  assert.equal((features.match(/<button data-home-action=/g) || []).length, 5);
-  assert.match(features, /cardCollection[\s\S]*daily[\s\S]*smartMatch[\s\S]*calendar[\s\S]*tasks/);
+  assert.equal((features.match(/<button(?: type="button")? data-home-(?:action|inline)=/g) || []).length, 5);
+  assert.match(features, /cardCollection[\s\S]*data-home-inline="daily"[\s\S]*smartMatch[\s\S]*calendar[\s\S]*tasks/);
   assert.doesNotMatch(features, /data-home-action="zodiac"/);
   assert.doesNotMatch(features, /data-home-action="card"|data-home-action="courses"|data-home-action="wallet"/);
   assert.match(features, /個人行程/);
