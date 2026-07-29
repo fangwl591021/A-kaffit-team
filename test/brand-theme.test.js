@@ -19,5 +19,5 @@ test("public site uses the logo-derived A-kaffit rust theme", () => {
   assert.match(css, /\.ak-official-import\{[^}]*flex:1;[^}]*border-top:6px solid var\(--ak-soft\)/);
   assert.match(css, /\.ak-content-tabs\{[^}]*grid-template-columns:repeat\(4/);
   assert.doesNotMatch(css, /#003f2d|#002d21|#24e56f|#004932|#003b2c/);
-  assert.match(html, /\/akaffit-20260729-21\.css/);
+  assert.match(html, /\/akaffit-20260729-22\.css/);
 });
