@@ -4,20 +4,23 @@ import { readFileSync } from "node:fs";
 
 const source = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
-test("public site uses the logo-derived A-kaffit rust theme", () => {
+test("public site uses the coffee-inspired A-kaffit rust theme", () => {
   const css = source("public/akaffit.css");
   const html = source("public/index.html");
 
   assert.match(css, /--ak-primary:#b95121/);
-  assert.match(css, /\.ak-home-banner\{[^}]*var\(--ak-primary\)[^}]*var\(--ak-deep\)/);
-  assert.match(css, /body:has\(\.ak-dashboard\)\{[^}]*overflow:hidden/);
-  assert.match(css, /\.ak-dashboard\{[^}]*height:calc\(100svh - 112px\)[^}]*overflow:hidden/);
-  assert.match(css, /\.ak-home-content\{[^}]*display:flex;flex-direction:column;[^}]*overflow:hidden;overscroll-behavior:contain/);
-  assert.match(css, /\.ak-bottom-nav\{[^}]*var\(--ak-primary\)[^}]*var\(--ak-deep\)/);
-  assert.match(css, /\.ak-feature-grid\{[^}]*position:relative;flex:0 0 auto;z-index:18/);
-  assert.match(css, /\.ak-feature-grid button\{[^}]*color:var\(--ak-primary\)/);
-  assert.match(css, /\.ak-official-import\{[^}]*flex:1;[^}]*border-top:6px solid var\(--ak-soft\)/);
-  assert.match(css, /\.ak-content-tabs\{[^}]*grid-template-columns:repeat\(4/);
+  assert.match(css, /--ak-deep:#713015/);
+  assert.match(css, /--ak-accent:#d78358/);
+  assert.match(css, /--ak-cream:#fff8f3/);
+  assert.match(css, /--ak-soft:#f9e9df/);
+  assert.match(css, /--ak-ink:#3d2920/);
+  assert.match(css, /main#app:has\(\.ak-dashboard\)\{height:100svh;min-height:100svh;max-height:100svh;overflow:hidden/);
+  assert.match(css, /\.ak-dashboard\{[^}]*grid-template-rows:auto auto minmax\(0,1fr\) auto;[^}]*height:100svh;[^}]*overflow:hidden/);
+  assert.match(css, /\.ak-home-content\{[^}]*display:flex;flex-direction:column;[^}]*min-height:0;[^}]*overflow:hidden/);
+  assert.match(css, /\.ak-content-panel\{[^}]*flex:1 1 auto;[^}]*min-height:0/);
+  assert.match(css, /\.ak-bottom-nav\{[^}]*safe-area-inset-bottom/);
+  assert.match(css, /\.ak-frozen-nav \.ak-content-tabs\{[^}]*grid-template-columns:repeat\(5/);
   assert.doesNotMatch(css, /#003f2d|#002d21|#24e56f|#004932|#003b2c/);
-  assert.match(html, /\/akaffit-20260729-23\.css/);
+  assert.match(html, /\/akaffit-20260729-24\.css/);
+  assert.match(html, /\/app-20260729-90\.js/);
 });

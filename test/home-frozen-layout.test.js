@@ -4,53 +4,76 @@ import { readFileSync } from "node:fs";
 
 const source = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
-test("home compacts its banner and freezes feature plus social navigation", () => {
-  const app = source("public/app.js");
-  const css = source("public/akaffit.css");
-  const start = app.indexOf("async function home()");
-  const end = app.indexOf("async function legacyHome()", start);
-  const home = app.slice(start, end);
+const app = source("public/app.js");
+const css = source("public/akaffit.css");
+const homeStart = app.indexOf("async function home()");
+const homeEnd = app.indexOf("async function legacyHome()", homeStart);
+const home = app.slice(homeStart, homeEnd);
 
-  assert.match(home, /class="ak-home-avatar"[\s\S]*data-home-action="wallet"[\s\S]*data-home-action="zodiacPopup"[\s\S]*data-home-action="share"/);
-  assert.match(home, /ak-zodiac-icon[\s\S]*<svg/);
-  assert.match(home, /ak-share-qr-icon[\s\S]*<svg/);
-  assert.doesNotMatch(home, /dateText|greeting/);
+test("home uses a compact member summary, shared task toggle, and social-first viewport", () => {
+  assert.match(home, /class="ak-wordmark">A’kaffit/);
+  assert.match(home, /class="ak-task-notice\$\{taskAlert\}" data-home-task-toggle aria-expanded="false" aria-controls="homeTaskDetail"/);
+  assert.equal((home.match(/data-home-task-toggle/g) || []).length, 2);
+  assert.match(home, /class="ak-member-avatar" data-home-action="profile"[\s\S]*\$\{avatar\(\)\}/);
+  assert.match(home, /\$\{esc\(memberName\)\}，\$\{homeGreeting\(\)\}/);
+  assert.match(home, /class="ak-point-card" data-home-action="wallet"/);
+  assert.match(home, /class="ak-qr-card" data-home-action="share"/);
+  assert.match(home, /id="homeTaskDetail"[\s\S]*data-home-action="tasks">查看全部任務/);
   assert.match(home, /class="ak-frozen-nav"[\s\S]*class="ak-feature-grid"[\s\S]*class="ak-content-tabs"/);
-  assert.match(css, /\.ak-dashboard\{height:calc\(100svh - 75px\)\}/);
-  assert.match(css, /\.ak-home-banner \.portal-primary\{min-height:75px/);
-  assert.match(css, /\.ak-frozen-nav\{[^}]*flex:0 0 auto/);
-  assert.match(css, /\.ak-home-banner\{grid-template-columns:\.72fr repeat\(3,1fr\)\}/);
-  assert.match(home, /\$\{avatar\(\)\}<span class="ak-home-label">會員專區<\/span>/);
-  assert.match(css, /\.ak-home-avatar \.avatar\{width:38px;height:38px/);
-  assert.match(css, /\.ak-zodiac-entry\{display:flex;flex-direction:column;gap:3px/);
-  assert.match(css, /\.ak-share-entry\{display:flex;flex-direction:column;gap:3px/);
-  assert.match(css, /\.ak-frozen-nav \.ak-feature-grid button\{min-height:40px/);
-  assert.match(css, /\.ak-frozen-nav \.ak-content-tabs button\{min-height:36px/);
+  assert.match(css, /\.ak-home-task-detail\{max-height:232px/);
+  assert.match(css, /\.ak-home-task-list\{max-height:172px;[^}]*overflow-y:auto/);
+  assert.match(css, /\.ak-frozen-nav \.ak-feature-grid\{[^}]*grid-template-columns:repeat\(5/);
+  assert.match(css, /\.ak-frozen-nav \.ak-feature-grid button\{[^}]*min-height:62px/);
+  assert.match(css, /\.ak-frozen-nav \.ak-content-tabs button\{[^}]*min-height:45px/);
+  assert.match(css, /\.ak-instagram-panel\{[^}]*overflow-y:auto/);
 });
 
-test("exclusive share opens as a closable QR dialog", () => {
-  const app = source("public/app.js");
+test("task notice handles zero, pending, overdue, and API failure without failing home", () => {
+  const helperStart = app.indexOf("function homeTaskSummary");
+  const helperEnd = app.indexOf("function homeTaskListMarkup", helperStart);
+  const helperSource = app.slice(helperStart, helperEnd);
+  const { homeTaskSummary } = Function(`${helperSource}; return { homeTaskSummary };`)();
+  const future = new Date(Date.now() + 3600000).toISOString();
+  const past = new Date(Date.now() - 3600000).toISOString();
 
+  assert.equal(homeTaskSummary({ tasks:[] }).notice, "今日完成 ✓");
+  assert.equal(homeTaskSummary({ tasks:[{ status:"pending", dueAt:future }] }).notice, "1 項待辦");
+  assert.equal(homeTaskSummary({ tasks:[{ status:"postponed", dueAt:past }] }).notice, "1 項逾期");
+  assert.equal(homeTaskSummary(null, true).notice, "查看待辦");
+  assert.match(home, /Promise\.allSettled\(\[api\("\/v1\/points\/wallet"\), api\("\/v1\/tasks"\)\]\)/);
+  assert.match(home, /String\(taskSummary\.active\.length\)/);
+});
+
+test("both task controls expand and collapse the same panel", () => {
+  const helperStart = app.indexOf("function bindHomeTaskToggle");
+  const helperEnd = app.indexOf("async function home()", helperStart);
+  const helperSource = app.slice(helperStart, helperEnd);
+  const classes = new Set();
+  const panel = { classList:{ toggle:(name,on) => on ? classes.add(name) : classes.delete(name), contains:(name) => classes.has(name) } };
+  const detail = { hidden:true };
+  const callbacks = [];
+  const toggles = [0, 1].map(() => ({
+    expanded:"false",
+    setAttribute(name, value) { if (name === "aria-expanded") this.expanded = value; },
+    addEventListener(type, callback) { if (type === "click") callbacks.push(callback); },
+  }));
+  const document = {
+    querySelector(selector) { return selector === "[data-home-task-panel]" ? panel : detail; },
+    querySelectorAll() { return toggles; },
+  };
+  const bindHomeTaskToggle = Function("document", `${helperSource}; return bindHomeTaskToggle;`)(document);
+  bindHomeTaskToggle();
+  callbacks[0]();
+  assert.equal(detail.hidden, false);
+  assert.deepEqual(toggles.map((item) => item.expanded), ["true", "true"]);
+  callbacks[1]();
+  assert.equal(detail.hidden, true);
+  assert.deepEqual(toggles.map((item) => item.expanded), ["false", "false"]);
+});
+
+test("exclusive share still opens as a closable QR dialog", () => {
   assert.match(app, /id="sharePanel" class="ak-share-dialog hidden" role="dialog" aria-modal="true"/);
   assert.match(app, /class="ak-share-close" data-close-share aria-label="關閉專屬分享">×/);
   assert.match(app, /function closeShareQr\(\)[\s\S]*classList\.add\("hidden"\)/);
-  assert.match(app, /data-close-share/);
   assert.doesNotMatch(app.slice(app.indexOf("async function showShareQr()"), app.indexOf("async function copyInvite()")), /scrollIntoView|site-home-frame/);
-});
-
-
-test("home zodiac opens a closable fortune dialog without changing tabs", () => {
-  const app = source("public/app.js");
-  const css = source("public/akaffit.css");
-  const homeStart = app.indexOf("async function home()");
-  const homeEnd = app.indexOf("async function legacyHome()", homeStart);
-  const home = app.slice(homeStart, homeEnd);
-
-  assert.match(home, /data-home-action="zodiacPopup"/);
-  assert.match(app, /if\(action==="zodiacPopup"\)return showZodiacDialog\(\)/);
-  assert.match(app, /function showZodiacDialog\(\)[\s\S]*dialog\.className = "ak-zodiac-dialog"/);
-  assert.match(app, /class="ak-zodiac-close" data-close-zodiac aria-label="關閉星座運勢">×/);
-  assert.match(app, /function zodiacFortuneMarkup\(fortune\)/);
-  assert.match(css, /\.ak-zodiac-dialog\{position:fixed/);
-  assert.match(css, /\.ak-zodiac-card\{[^}]*max-height:90svh;overflow:auto/);
 });
