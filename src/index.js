@@ -60,7 +60,6 @@ import {
   confirmImport,
   createContactShare,
   createImport,
-  deleteContact,
   expandContactContent,
   INDUSTRY_OPTIONS,
   listContacts,
@@ -118,6 +117,7 @@ import {
   saveSmartMatch,
 } from "./smart-match-history.js";
 import {
+  deleteContactAndReverseReward,
   queueAndFulfillCardCollectionReward,
   reconcileMemberCardCollectionRewards,
   retryPendingCardCollectionRewards,
@@ -1318,7 +1318,7 @@ async function app(request, env, ctx) {
   if (request.method === "DELETE" && contactCardMatch) {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
-    try { await deleteContact(env.DB, env.MEDIA, member.userId, decodeURIComponent(contactCardMatch[1])); return json({ success: true }); }
+    try { const result=await deleteContactAndReverseReward(env,member.userId,decodeURIComponent(contactCardMatch[1])); return json({ success:true,...result }); }
     catch (error) { return badRequest(error.message || "收藏名片刪除失敗"); }
   }
   const contactShareMatch = url.pathname.match(/^\/v1\/card-collection\/([^/]+)\/share$/);

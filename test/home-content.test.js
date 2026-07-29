@@ -24,7 +24,10 @@ test("home exposes daily check-in and the directly imported official site", () =
   assert.doesNotMatch(home, />更多功能</);
   assert.doesNotMatch(home, /class="ak-stats"/);
   const features = home.slice(home.indexOf('<div class="ak-feature-grid">'), home.indexOf('</div>', home.indexOf('<div class="ak-feature-grid">')));
-  assert.equal((features.match(/<button data-home-action=/g) || []).length, 8);
+  assert.equal((features.match(/<button data-home-action=/g) || []).length, 5);
+  assert.match(features, /cardCollection[\s\S]*daily[\s\S]*smartMatch[\s\S]*zodiac[\s\S]*calendar/);
+  assert.doesNotMatch(features, /data-home-action="card"|data-home-action="courses"|data-home-action="wallet"/);
+  assert.match(features, /個人行程/);
   assert.doesNotMatch(features, /<i>/);
   assert.doesNotMatch(home, /ak-moment-banner/);
 });
