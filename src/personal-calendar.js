@@ -82,6 +82,31 @@ async function ensureSystemLabels(db, userId) {
   }
 }
 
+export async function ensureContactFirstTask(db, userId, contactCardId, task = {}) {
+  await ensurePersonalCalendarSchema(db);
+  await ensureSystemLabels(db, userId);
+  const contact = await db.prepare("SELECT id,display_name FROM contact_cards WHERE id=? AND scanner_user_id=? AND status='active'")
+    .bind(contactCardId, userId).first();
+  if (!contact) throw new Error("關聯名片不存在");
+  const existing = await db.prepare(`SELECT id,title,description,starts_at,ends_at FROM personal_calendar_events
+    WHERE platform_user_id=? AND contact_card_id=? AND status='active' AND instr(description,'[AI智慧名片CRM]')=1
+    ORDER BY created_at ASC LIMIT 1`).bind(userId, contactCardId).first();
+  if (existing) return { id:existing.id, existing:true };
+  const label = await db.prepare("SELECT id FROM personal_calendar_labels WHERE platform_user_id=? AND source_type='personal' AND is_system=1 ORDER BY created_at ASC LIMIT 1")
+    .bind(userId).first();
+  if (!label) throw new Error("找不到個人行程標籤");
+  const dueInDays = Math.max(1, Math.min(30, Number(task.dueInDays) || 3));
+  const startsAt = new Date(Date.now() + dueInDays * 86400000);
+  const endsAt = new Date(startsAt.getTime() + 3600000);
+  const id = newId("cal_event");
+  const title = text(task.title, 100) || `首次聯絡 ${contact.display_name || "名片聯絡人"}`;
+  const description = `[AI智慧名片CRM]\n${text(task.description, 1900) || "確認公司公開資料並完成第一次聯絡。"}`;
+  await db.prepare(`INSERT INTO personal_calendar_events
+    (id,platform_user_id,label_id,contact_card_id,title,description,location,starts_at,ends_at,all_day,reminder_minutes,recurrence)
+    VALUES (?,?,?,?,?,?,?,?,?,0,1440,'none')`)
+    .bind(id,userId,label.id,contactCardId,title,description,"",startsAt.toISOString(),endsAt.toISOString()).run();
+  return { id, existing:false };
+}
 function mapLabel(row) {
   return {
     id: row.id,

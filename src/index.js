@@ -81,6 +81,12 @@ import {
   updateContact,
 } from "./card-collection.js";
 import {
+  processContactAiCardCrm,
+  queueContactAiCardCrm,
+  queueMemberAiCardCrmBackfill,
+  queueSystemAiCardCrmBackfill,
+} from "./ai-card-crm.js";
+import {
   deleteOpenAIKey,
   getOpenAIKeyStatus,
   resolveOpenAIKey,
@@ -272,6 +278,7 @@ function scheduleCardImportPipeline(env, ctx, userId, eventId, provider = null) 
       // OCR 收藏成立後先贈點；五大標籤是第二階段，失敗不影響收藏與贈點。
       await queueAndFulfillCardCollectionReward(env,userId,processed.card.id);
       await processContactInsightsInBackground(env.DB,userId,processed.card.id,aiProvider,env.OPENAI_CARD_MODEL);
+      await processContactAiCardCrm(env.DB,userId,processed.card.id,aiProvider,env.OPENAI_CARD_MODEL);
       if(await queueMemberMatchRankingRefresh(env.DB,userId,true,processed.card.id))await processMemberMatchRankings(env.DB,userId,aiProvider,env.OPENAI_CARD_MODEL);
     }
     return processed;
@@ -290,6 +297,17 @@ function scheduleContactCrmInsights(env, ctx, userId, id) {
   })();
   if(ctx?.waitUntil)ctx.waitUntil(task);
   else task.catch((error)=>console.error('Automatic CRM insight analysis failed',error));
+}
+
+function scheduleContactAiCardCrm(env,ctx,userId,id) {
+  const task=(async()=>{
+    const aiProvider=await resolveCardAiProvider(env);
+    if(!aiProvider)throw new Error("MLM AI 服務尚未連線");
+    await processContactAiCardCrm(env.DB,userId,id,aiProvider,env.OPENAI_CARD_MODEL);
+  })();
+  if(ctx?.waitUntil)ctx.waitUntil(task);
+  else task.catch((error)=>console.error("Automatic AI business-card CRM enrichment failed",error));
+  return task;
 }
 
 function scheduleMemberCrmInsights(env,ctx,userId) {
@@ -1168,6 +1186,11 @@ async function app(request, env, ctx) {
     });
     for(const task of recovery.imports || [])scheduleCardImportPipeline(env,ctx,task.userId,task.eventId);
     for(const task of recovery.insights || [])scheduleContactCrmInsights(env,ctx,task.userId,task.id);
+    const aiCrmRecovery=await queueMemberAiCardCrmBackfill(env.DB,member.userId,2).catch((error)=>{
+      console.error("AI business-card CRM recovery scan failed",error);
+      return [];
+    });
+    for(const task of aiCrmRecovery)scheduleContactAiCardCrm(env,ctx,task.userId,task.id);
     // 舊版若已完成 OCR、卻在五大標籤階段中斷，補建該張名片唯一的贈點工作。
     const rewardRecovery=reconcileMemberCardCollectionRewards(env,member.userId).catch((error)=>{
       console.error("Card reward recovery failed",error);
@@ -1184,7 +1207,7 @@ async function app(request, env, ctx) {
       cards:await listContacts(env.DB,member.userId,url.searchParams.get("search") || "",url.searchParams.get("industry") || ""),
       industryOptions:INDUSTRY_OPTIONS,
       rankingStatus:memberRankingStatus.status,
-      recovery:{imports:(recovery.imports || []).length,insights:(recovery.insights || []).length,rankings:rankingQueued},
+      recovery:{imports:(recovery.imports || []).length,insights:(recovery.insights || []).length,aiCrm:aiCrmRecovery.length,rankings:rankingQueued},
     });
   }
 
@@ -1269,6 +1292,7 @@ async function app(request, env, ctx) {
     try {
       const result = await confirmImport(env.DB, env.MEDIA, member.userId, decodeURIComponent(confirmCardImport[1]), (await readJson(request)) || {});
       scheduleContactCrmInsights(env,ctx,member.userId,result.card.id);
+      scheduleContactAiCardCrm(env,ctx,member.userId,result.card.id);
       const reward = result.updated
         ? {status:"duplicate",points:0}
         : await queueAndFulfillCardCollectionReward(env,member.userId,result.card.id);
@@ -1294,6 +1318,18 @@ async function app(request, env, ctx) {
     }
   }
 
+  const contactAiCrmRetryMatch = url.pathname.match(/^\/v1\/card-collection\/([^/]+)\/recalculate-ai-crm$/);
+  if (request.method === "POST" && contactAiCrmRetryMatch) {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      const cardId=decodeURIComponent(contactAiCrmRetryMatch[1]);
+      const queued=await queueContactAiCardCrm(env.DB,member.userId,cardId,true);
+      if(!queued)return badRequest("這張名片不是掃描建立，無法執行公司資料補全");
+      scheduleContactAiCardCrm(env,ctx,member.userId,cardId);
+      return json({success:true,status:"queued"},202);
+    } catch(error) { return badRequest(error.message || "AI CRM 重新補全失敗"); }
+  }
   const contactCardMatch = url.pathname.match(/^\/v1\/card-collection\/([^/]+)$/);
   const contactContentExpandMatch = url.pathname.match(/^\/v1\/card-collection\/([^/]+)\/content-suggestions$/);
   if (request.method === "POST" && contactContentExpandMatch) {
@@ -1311,6 +1347,7 @@ async function app(request, env, ctx) {
     try {
       const card=await updateContact(env.DB,member.userId,decodeURIComponent(contactCardMatch[1]),(await readJson(request)) || {});
       if(card.aiInsights?.status === 'queued')scheduleContactCrmInsights(env,ctx,member.userId,card.id);
+      if(card.aiCrm?.status === 'queued')scheduleContactAiCardCrm(env,ctx,member.userId,card.id);
       return json({success:true,card});
     }
     catch (error) { return badRequest(error.message || "收藏名片更新失敗"); }
@@ -2417,6 +2454,17 @@ async function runSystemCrmInsightBackfill(env) {
   }
 }
 
+async function runSystemAiCardCrmBackfill(env) {
+  try {
+    const aiProvider=await resolveCardAiProvider(env);
+    if(!aiProvider)return;
+    const tasks=await queueSystemAiCardCrmBackfill(env.DB,2);
+    for(const task of tasks)await processContactAiCardCrm(env.DB,task.userId,task.id,aiProvider,env.OPENAI_CARD_MODEL);
+  } catch(error) {
+    console.error("Scheduled AI business-card CRM backfill failed",error);
+  }
+}
+
 async function runMlmCourseSync(env) {
   try {
     const result = await syncMlmCourses(env);
@@ -2439,6 +2487,7 @@ export default {
   },
   async scheduled(_event, env, ctx) {
     ctx.waitUntil(runSystemCrmInsightBackfill(env));
+    ctx.waitUntil(runSystemAiCardCrmBackfill(env));
     ctx.waitUntil(runMlmCourseSync(env));
     ctx.waitUntil(retryPendingCardCollectionRewards(env));
   },
