@@ -26,15 +26,7 @@ test("home member summary preserves profile, wallet, and exclusive sharing actio
   assert.match(home, /class="ak-profile-card" data-home-action="profile"[\s\S]*<span>我的<\/span>/);
 });
 
-test("greeting follows morning, afternoon, and evening periods", () => {
-  const helperStart = app.indexOf("function homeGreeting");
-  const helperEnd = app.indexOf("function homeTaskSummary", helperStart);
-  const helperSource = app.slice(helperStart, helperEnd);
-  const { homeGreeting } = Function(`${helperSource}; return { homeGreeting };`)();
-  assert.equal(homeGreeting(new Date(2026, 6, 29, 5, 0)), "早安");
-  assert.equal(homeGreeting(new Date(2026, 6, 29, 11, 59)), "早安");
-  assert.equal(homeGreeting(new Date(2026, 6, 29, 12, 0)), "午安");
-  assert.equal(homeGreeting(new Date(2026, 6, 29, 17, 59)), "午安");
-  assert.equal(homeGreeting(new Date(2026, 6, 29, 18, 0)), "晚上好");
-  assert.equal(homeGreeting(new Date(2026, 6, 29, 4, 59)), "晚上好");
+test("home omits the greeting and centers the profile in the brand row", () => {
+  assert.doesNotMatch(app, /function homeGreeting/);
+  assert.match(home, /class="ak-member-brand-row"[\s\S]*class="ak-wordmark"[\s\S]*class="ak-member-avatar"[\s\S]*class="ak-task-notice/);
 });

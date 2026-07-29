@@ -15,7 +15,7 @@ test("home uses a compact member summary, shared task toggle, and social-first v
   assert.match(home, /class="ak-task-notice\$\{taskAlert\}" data-home-task-toggle aria-expanded="false" aria-controls="homeTaskDetail"/);
   assert.equal((home.match(/data-home-task-toggle/g) || []).length, 2);
   assert.match(home, /class="ak-member-avatar" data-home-action="profile"[\s\S]*\$\{avatar\(\)\}/);
-  assert.match(home, /\$\{esc\(memberName\)\}，\$\{homeGreeting\(\)\}/);
+  assert.doesNotMatch(home, /homeGreeting|memberName|早安|午安|晚上好/);
   assert.match(home, /class="ak-point-card" data-home-action="wallet"/);
   assert.match(home, /class="ak-qr-card" data-home-action="share"/);
   assert.match(home, /id="homeTaskDetail"[\s\S]*data-home-action="tasks">查看全部任務/);
