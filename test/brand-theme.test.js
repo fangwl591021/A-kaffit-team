@@ -21,6 +21,8 @@ test("public site uses the coffee-inspired A-kaffit rust theme", () => {
   assert.match(css, /\.ak-home-content>\.ak-content-tabs\{[^}]*safe-area-inset-bottom/);
   assert.match(css, /\.ak-home-content>\.ak-content-tabs\{[^}]*grid-template-columns:repeat\(5/);
   assert.doesNotMatch(css, /#003f2d|#002d21|#24e56f|#004932|#003b2c/);
-  assert.match(html, /\/akaffit-20260729-26\.css/);
+  assert.match(css, /\.ak-home-content>\.ak-content-tabs\{[^}]*background:var\(--ak-soft\)/);
+  assert.match(css, /\.ak-home-content>\.ak-content-tabs button\.active\{[^}]*background:#f3d2c1/);
+  assert.match(html, /\/akaffit-20260729-27\.css/);
   assert.match(html, /\/app-20260729-94\.js/);
 });
