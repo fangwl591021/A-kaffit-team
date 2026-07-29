@@ -1,6 +1,6 @@
 import { ensureContactFirstTask } from "./personal-calendar.js";
 
-export const AI_CARD_CRM_VERSION = "company-enrichment-v1";
+export const AI_CARD_CRM_VERSION = "company-enrichment-v2";
 
 const text = (value, max = 1000) => String(value || "").trim().slice(0, max);
 const safeUrl = (value) => {
@@ -117,7 +117,7 @@ async function generateAiCardCrm(provider, model, row) {
     reasoning:{effort:"low"},
     tools:[{type:"web_search"}],
     max_output_tokens:2800,
-    input:[{role:"user",content:`你是繁體中文企業資料研究員。請用已確認的商務名片資料搜尋公開網路，建立可供 CRM 使用的公司知識卡與第一個跟進任務。\n\n名片資料：${JSON.stringify(facts)}\n\n規則：\n1. 必須先確認公司名稱、人物、職稱、地址或網域相互吻合，避免混入同名公司。\n2. company 補全官網、Google Map、Facebook、Instagram、YouTube、LinkedIn、公司介紹、Logo 圖片網址、地址、電話、Email、統編；查不到或無法確認時填空字串，不得猜測。\n3. news 與 awards 只收錄可由公開來源驗證的內容，無資料回傳空陣列。\n4. knowledgeCard.summary 濃縮公司定位；services 列出主要產品服務；contactAngles 提供後續商務溝通切入點。\n5. firstTask 必須是實際可執行的首次跟進，dueInDays 為 1 到 30 天。\n6. sources 列出本次採用的公開來源網址。只回傳符合 schema 的 JSON。`}],
+    input:[{role:"user",content:`你是繁體中文企業資料研究員。請用已確認的商務名片資料搜尋公開網路，建立可供 CRM 使用的公司知識卡與第一個跟進任務。\n\n名片資料：${JSON.stringify(facts)}\n\n規則：\n1. 依序用「姓名＋公司／職稱」、公司全名、電話原字串與純數字、完整地址、Email／網域做精確搜尋；不得只依模糊公司名稱配對。\n2. 公司名稱與統編優先查經濟部商工登記公示資料（findbiz.nat.gov.tw、gcis.nat.gov.tw、data.gcis.nat.gov.tw）或其他政府資料；律師、醫師等專業人士另查主管機關、公會與政府名冊。\n3. 只有電話、Email、完整地址、統編等強識別資料相符，或兩個獨立公開來源同時支持時，才可採用公司資料；Google Map、官網與社群只能輔助，避免混入同名對象。\n4. company 補全官網、Google Map、Facebook、Instagram、YouTube、LinkedIn、公司介紹、Logo 圖片網址、地址、電話、Email、統編；統編只能採政府登記或官方網站，查不到或無法確認時填空字串，不得猜測。\n5. news 與 awards 只收錄可由公開來源驗證的內容，無資料回傳空陣列。\n6. knowledgeCard.summary 濃縮公司定位；services 列出主要產品服務；contactAngles 提供後續商務溝通切入點。\n7. firstTask 必須是實際可執行的首次跟進，dueInDays 為 1 到 30 天。\n8. sources 列出本次採用的公開來源網址。只回傳符合 schema 的 JSON。`}],
     text:{format:{type:"json_schema",name:"ai_business_card_crm",strict:true,schema:AI_CARD_CRM_SCHEMA}},
   });
   const outputText=result.output_text || result.output?.flatMap((item)=>item.content || []).find((item)=>item.type==="output_text")?.text;

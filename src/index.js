@@ -75,6 +75,9 @@ import {
   recognizeImport,
   submitImportInBackground,
   processImportInBackground,
+  queueContactCardReverification,
+  queueMemberCardVerificationBackfill,
+  reverifyContactFromSource,
   queueLegacyFailedImportRetries,
   queueMemberStaleCardAnalysis,
   queueContactCrmInsights,
@@ -322,6 +325,19 @@ function scheduleContactAiCardCrm(env,ctx,userId,id) {
   })();
   if(ctx?.waitUntil)ctx.waitUntil(task);
   else task.catch((error)=>console.error("Automatic AI business-card CRM enrichment failed",error));
+  return task;
+}
+function scheduleContactCardReverification(env,ctx,userId,id) {
+  const task=(async()=>{
+    const aiProvider=await resolveCardAiProvider(env);
+    if(!aiProvider)throw new Error('MLM AI 服務尚未連線');
+    await reverifyContactFromSource(env.DB,env.MEDIA,userId,id,aiProvider,env.OPENAI_CARD_MODEL);
+    await processContactInsightsInBackground(env.DB,userId,id,aiProvider,env.OPENAI_CARD_MODEL);
+    await processContactAiCardCrm(env.DB,userId,id,aiProvider,env.OPENAI_CARD_MODEL);
+    if(await queueMemberMatchRankingRefresh(env.DB,userId,true,id))await processMemberMatchRankings(env.DB,userId,aiProvider,env.OPENAI_CARD_MODEL);
+  })();
+  if(ctx?.waitUntil)ctx.waitUntil(task);
+  else task.catch((error)=>console.error('Business-card reverification failed',error));
   return task;
 }
 
@@ -1279,11 +1295,17 @@ async function app(request, env, ctx) {
     });
     for(const task of recovery.imports || [])scheduleCardImportPipeline(env,ctx,task.userId,task.eventId);
     for(const task of recovery.insights || [])scheduleContactCrmInsights(env,ctx,task.userId,task.id);
+    const verificationRecovery=await queueMemberCardVerificationBackfill(env.DB,member.userId,1).catch((error)=>{
+      console.error("Business-card verification recovery scan failed",error);
+      return [];
+    });
+    for(const task of verificationRecovery)scheduleContactCardReverification(env,ctx,task.userId,task.id);
+    const verifyingIds=new Set(verificationRecovery.map((task)=>task.id));
     const aiCrmRecovery=await queueMemberAiCardCrmBackfill(env.DB,member.userId,2).catch((error)=>{
       console.error("AI business-card CRM recovery scan failed",error);
       return [];
     });
-    for(const task of aiCrmRecovery)scheduleContactAiCardCrm(env,ctx,task.userId,task.id);
+    for(const task of aiCrmRecovery){if(!verifyingIds.has(task.id))scheduleContactAiCardCrm(env,ctx,task.userId,task.id);}
     // 舊版若已完成 OCR、卻在五大標籤階段中斷，補建該張名片唯一的贈點工作。
     const rewardRecovery=reconcileMemberCardCollectionRewards(env,member.userId).catch((error)=>{
       console.error("Card reward recovery failed",error);
@@ -1300,7 +1322,7 @@ async function app(request, env, ctx) {
       cards:await listContacts(env.DB,member.userId,url.searchParams.get("search") || "",url.searchParams.get("industry") || ""),
       industryOptions:INDUSTRY_OPTIONS,
       rankingStatus:memberRankingStatus.status,
-      recovery:{imports:(recovery.imports || []).length,insights:(recovery.insights || []).length,aiCrm:aiCrmRecovery.length,rankings:rankingQueued},
+      recovery:{imports:(recovery.imports || []).length,insights:(recovery.insights || []).length,verification:verificationRecovery.length,aiCrm:aiCrmRecovery.length,rankings:rankingQueued},
     });
   }
 
@@ -1417,10 +1439,14 @@ async function app(request, env, ctx) {
     if (!member) return json({ success:false, error:"Unauthorized" }, 401);
     try {
       const cardId=decodeURIComponent(contactAiCrmRetryMatch[1]);
-      const queued=await queueContactAiCardCrm(env.DB,member.userId,cardId,true);
-      if(!queued)return badRequest("這張名片不是掃描建立，無法執行公司資料補全");
-      scheduleContactAiCardCrm(env,ctx,member.userId,cardId);
-      return json({success:true,status:"queued"},202);
+      const verificationQueued=await queueContactCardReverification(env.DB,member.userId,cardId);
+      if(verificationQueued)scheduleContactCardReverification(env,ctx,member.userId,cardId);
+      else {
+        const crmQueued=await queueContactAiCardCrm(env.DB,member.userId,cardId,true);
+        if(!crmQueued)return badRequest("這張名片不是掃描建立，無法執行公司資料補全");
+        scheduleContactAiCardCrm(env,ctx,member.userId,cardId);
+      }
+      return json({success:true,status:"queued",verification:verificationQueued},202);
     } catch(error) { return badRequest(error.message || "AI CRM 重新補全失敗"); }
   }
   const contactCardMatch = url.pathname.match(/^\/v1\/card-collection\/([^/]+)$/);

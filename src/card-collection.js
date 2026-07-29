@@ -154,6 +154,18 @@ function bytesToBase64(buffer) {
 }
 
 const OCR_SCHEMA = { type:'object', additionalProperties:false, required:['isBusinessCard','confidence','language','primaryIndustry','secondaryIndustries','industryConfidence',...Object.keys(FIELD_LIMITS)], properties:{ isBusinessCard:{type:'boolean'}, confidence:{type:'number'}, language:{type:'string'}, primaryIndustry:{type:'string',enum:[INDUSTRY_PENDING,...INDUSTRY_OPTIONS]}, secondaryIndustries:{type:'array',maxItems:2,items:{type:'string',enum:INDUSTRY_OPTIONS}}, industryConfidence:{type:'number'}, ...Object.fromEntries(Object.keys(FIELD_LIMITS).map((key)=>[key,{type:'string'}])) } };
+export const OCR_VERIFICATION_VERSION = 'visual-web-v2';
+const OCR_VERIFICATION_SCHEMA = {
+  ...OCR_SCHEMA,
+  required:[...OCR_SCHEMA.required,'verificationVersion','verificationConfidence','verificationNotes','verificationSources'],
+  properties:{
+    ...OCR_SCHEMA.properties,
+    verificationVersion:{type:'string',enum:[OCR_VERIFICATION_VERSION]},
+    verificationConfidence:{type:'number',minimum:0,maximum:1},
+    verificationNotes:{type:'string'},
+    verificationSources:{type:'array',maxItems:10,items:{type:'object',additionalProperties:false,required:['label','url','matchedFields'],properties:{label:{type:'string'},url:{type:'string'},matchedFields:{type:'array',maxItems:6,items:{type:'string'}}}}},
+  },
+};
 const CONTENT_EXPANSION_SCHEMA = { type:'object', additionalProperties:false, required:['items'], properties:{ items:{ type:'array', minItems:3, maxItems:5, items:{ type:'string' } } } };
 const CRM_INSIGHT_KEYS = ['personality','interests','wealth','health','career'];
 const CRM_INSIGHT_ANALYSIS_VERSION = 'line-fate-industry-v2';
@@ -193,16 +205,43 @@ async function callAiResponses(provider, body) {
   }
 }
 
-async function recognizeWithOpenAI(apiKey, model, images) {
-  const content = [{ type:'input_text', text:`辨識這張商務名片。只擷取畫面中可確認的文字，不猜測；無法確認的欄位填空字串。若不是名片，isBusinessCard=false。繁體中文內容保留原文。note 僅放無法歸類但有價值的名片文字。
-並依公司、職稱、部門與服務說明做一次行業分類：主行業只能選 1 個，次行業最多 2 個且不可與主行業相同。可選行業為：${INDUSTRY_OPTIONS.join('、')}。無法可靠判斷時 primaryIndustry 填「待分類」、secondaryIndustries 填空陣列；industryConfidence 填 0 到 1。` }];
-  for (const image of images) content.push({ type:'input_image', image_url:`data:${image.type};base64,${bytesToBase64(image.bytes)}`, detail:'high' });
-  const result = await callAiResponses(apiKey, { model:model || 'gpt-5.6-terra', reasoning:{effort:'low'}, max_output_tokens:1800, input:[{role:'user',content}], text:{format:{type:'json_schema',name:'business_card',strict:true,schema:OCR_SCHEMA}} });
-  const outputText = result.output_text || result.output?.flatMap((item)=>item.content || []).find((item)=>item.type === 'output_text')?.text;
-  if (!outputText) throw new Error('AI 未回傳名片辨識結果');
-  return JSON.parse(outputText);
+function outputText(result = {}) {
+  return result.output_text || result.output?.flatMap((item)=>item.content || []).find((item)=>item.type === 'output_text')?.text || '';
 }
+function businessCardImages(images) {
+  return images.map((image)=>({type:'input_image',image_url:`data:${image.type};base64,${bytesToBase64(image.bytes)}`,detail:'high'}));
+}
+export function businessCardVerificationPrompt(firstPass = {}) {
+  return `你是繁體中文商務名片查證員。這是第一次 OCR 結果：${JSON.stringify(firstPass)}
 
+請重新逐字查看名片原圖，特別核對姓名與公司名稱中外形相近的中文字；再使用公開網路交叉查證。
+查證順序：
+1. 以姓名＋公司／事務所／職稱精確搜尋。
+2. 分別以電話原字串、純數字電話、完整地址、Email 精確搜尋。
+3. 公司與統編優先查經濟部商工登記公示資料（findbiz.nat.gov.tw、gcis.nat.gov.tw、data.gcis.nat.gov.tw）或其他政府資料。
+4. 律師、醫師等專業人士另查主管機關、公會或政府名冊；Google Map、官網與社群只能當輔助來源。
+5. 只有原圖可清楚辨識，或至少一個強識別資料（電話、Email、完整地址、統編）相符，或兩個獨立公開來源同時支持時，才可修正姓名或公司名稱。
+6. 統編只能採用政府登記或官方網站可確認的資料；找不到就留空，不得猜測。
+7. 所有名片欄位都要回傳；無法確認時保留第一次 OCR。verificationSources 記錄實際採用網址及相符欄位，verificationNotes 說明是否修正與理由。`;
+}
+async function recognizeWithOpenAI(apiKey, model, images) {
+  const firstContent = [{ type:'input_text', text:`辨識這張商務名片。只擷取畫面中可確認的文字，不猜測；無法確認的欄位填空字串。若不是名片，isBusinessCard=false。繁體中文內容保留原文。note 僅放無法歸類但有價值的名片文字。
+並依公司、職稱、部門與服務說明做一次行業分類：主行業只能選 1 個，次行業最多 2 個且不可與主行業相同。可選行業為：${INDUSTRY_OPTIONS.join('、')}。無法可靠判斷時 primaryIndustry 填「待分類」、secondaryIndustries 填空陣列；industryConfidence 填 0 到 1。` },...businessCardImages(images)];
+  const firstResult = await callAiResponses(apiKey, { model:model || 'gpt-5.6-terra', reasoning:{effort:'low'}, max_output_tokens:1800, input:[{role:'user',content:firstContent}], text:{format:{type:'json_schema',name:'business_card',strict:true,schema:OCR_SCHEMA}} });
+  const firstPassText=outputText(firstResult);
+  if(!firstPassText)throw new Error('AI 未回傳第一次名片辨識結果');
+  const firstPass=JSON.parse(firstPassText);
+  if(!firstPass.isBusinessCard)return {...firstPass,verificationVersion:OCR_VERIFICATION_VERSION,verificationConfidence:0,verificationNotes:'第一次辨識判定不是名片',verificationSources:[]};
+  const verificationContent=[{type:'input_text',text:businessCardVerificationPrompt(firstPass)},...businessCardImages(images)];
+  const verifiedResult=await callAiResponses(apiKey,{
+    model:model || 'gpt-5.6-terra',reasoning:{effort:'medium'},tools:[{type:'web_search'}],max_output_tokens:2600,
+    input:[{role:'user',content:verificationContent}],
+    text:{format:{type:'json_schema',name:'verified_business_card',strict:true,schema:OCR_VERIFICATION_SCHEMA}},
+  });
+  const verifiedText=outputText(verifiedResult);
+  if(!verifiedText)throw new Error('AI 未回傳名片二次查證結果');
+  return JSON.parse(verifiedText);
+}
 
 // 使用 Responses 的 web_search 工具，只把 OCR／人工校正過的公開欄位送去查找。
 // 回傳候選文案而非直接寫入，最後仍由使用者選取後才保存至數位名片。
@@ -332,7 +371,68 @@ export async function processImportInBackground(db, bucket, userId, eventId, api
   const saved=await db.prepare('SELECT * FROM contact_cards WHERE id=? AND scanner_user_id=?').bind(contact.id,userId).first();
   return {created:true,duplicate:false,card:rowToCard(saved)};
 }
-
+const CARD_DB_FIELDS={displayName:'display_name',englishName:'english_name',companyName:'company_name',jobTitle:'job_title',department:'department',mobile:'mobile',companyPhone:'company_phone',email:'email',websiteUrl:'website_url',lineUrl:'line_url',address:'address',serviceDescription:'service_description',note:'note'};
+export function mergeVerifiedCard(row, original = {}, verified = {}) {
+  const merged={};
+  for(const [key,limit] of Object.entries(FIELD_LIMITS)){
+    const current=text(row[CARD_DB_FIELDS[key]],limit);
+    const first=text(original[key],limit);
+    const checked=text(verified[key],limit);
+    merged[key]=(!current || current===first) ? (checked || current) : current;
+  }
+  return cleanCard(merged);
+}
+export async function reverifyContactFromSource(db,bucket,userId,id,apiKey,model) {
+  if(!apiKey)throw new Error('MLM AI 服務尚未連線');
+  const row=await db.prepare(`SELECT cc.*,cie.front_r2_key import_front_key,cie.back_r2_key import_back_key,cie.front_content_type import_content_type,cie.ocr_json import_ocr_json
+    FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
+    WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active' AND cie.front_r2_key!=''`).bind(id,userId).first();
+  if(!row)throw new Error('這張名片沒有可供重新辨識的原始圖片');
+  await db.prepare("UPDATE card_import_events SET status='verification_processing',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.source_event_id).run();
+  try{
+    const images=[];
+    for(const key of [row.import_front_key,row.import_back_key].filter(Boolean)){
+      const object=await bucket.get(key);
+      if(object)images.push({type:object.httpMetadata?.contentType || row.import_content_type || 'image/webp',bytes:await object.arrayBuffer()});
+    }
+    if(!images.length)throw new Error('找不到原始名片圖片');
+    let original={};try{original=JSON.parse(row.import_ocr_json || '{}');}catch{}
+    const verified=await recognizeWithOpenAI(apiKey,model,images);
+    if(!verified.isBusinessCard)throw new Error('二次查證無法確認這是商務名片');
+    const card=mergeVerifiedCard(row,original,verified);
+    const values=[card.displayName,card.englishName,card.companyName,card.jobTitle,card.department,card.mobile,card.companyPhone,card.email,card.websiteUrl,card.lineUrl,card.address,card.serviceDescription,card.note,card.normalizedMobile,card.normalizedEmail,card.normalizedNameCompany];
+    const versions=rawVersions(row);
+    versions._crmInsights={...insightMeta(row),status:'queued',cards:{},error:'',updatedAt:new Date().toISOString()};
+    versions._aiCrm={...(versions._aiCrm || {}),status:'queued',analysisVersion:'',error:'',updatedAt:new Date().toISOString()};
+    await db.batch([
+      db.prepare('UPDATE contact_cards SET display_name=?,english_name=?,company_name=?,job_title=?,department=?,mobile=?,company_phone=?,email=?,website_url=?,line_url=?,address=?,service_description=?,note=?,normalized_mobile=?,normalized_email=?,normalized_name_company=?,versions_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND scanner_user_id=?').bind(...values,JSON.stringify(versions),id,userId),
+      db.prepare("UPDATE card_import_events SET status='created',ocr_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(verified),row.source_event_id),
+    ]);
+    return rowToCard(await db.prepare('SELECT * FROM contact_cards WHERE id=? AND scanner_user_id=?').bind(id,userId).first());
+  }catch(error){
+    await db.prepare("UPDATE card_import_events SET status='created',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.source_event_id).run();
+    throw error;
+  }
+}
+export async function queueContactCardReverification(db,userId,id) {
+  const row=await db.prepare(`SELECT cc.id FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
+    WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active' AND cie.front_r2_key!=''`).bind(id,userId).first();
+  if(!row)return false;
+  await db.prepare("UPDATE card_import_events SET status='verification_queued',updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?").bind(id).run();
+  return true;
+}
+export async function queueMemberCardVerificationBackfill(db,userId,limit=1) {
+  const capped=Math.max(1,Math.min(Number(limit)||1,3));
+  const result=await db.prepare(`SELECT cc.id,cc.scanner_user_id
+    FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
+    WHERE cc.scanner_user_id=? AND cc.status='active' AND cie.front_r2_key!=''
+      AND COALESCE(json_extract(cie.ocr_json,'$.verificationVersion'),'')!=?
+      AND cie.status NOT IN ('verification_queued','verification_processing')
+    ORDER BY cie.updated_at ASC LIMIT ?`).bind(userId,OCR_VERIFICATION_VERSION,capped).all();
+  const rows=result.results || [];
+  if(rows.length)await db.batch(rows.map((row)=>db.prepare("UPDATE card_import_events SET status='verification_queued',updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?").bind(row.id)));
+  return rows.map((row)=>({id:row.id,userId:row.scanner_user_id}));
+}
 export async function queueLegacyFailedImportRetries(db, limit = 3) {
   const cappedLimit=Math.max(1,Math.min(Number(limit) || 3,10));
   const result=await db.prepare(`SELECT cie.id event_id,cie.scanner_user_id
