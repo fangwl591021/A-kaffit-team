@@ -14,5 +14,10 @@ test("A’kaffit YouTube tab uses the official public channel feed and safe thum
   assert.match(worker, /url\.pathname === "\/v1\/youtube\/videos"/);
   assert.match(app, /data-content-view="youtube"/);
   assert.match(app, /data-content-view="official"/);
-  assert.match(app, /target="_blank" rel="noopener noreferrer"/);
+  assert.match(app, /class="ak-youtube-card" data-youtube-index=/);
+  assert.match(app, /function showYoutubePlayer\(video = \{\}\)/);
+  assert.match(app, /youtube-nocookie\.com\/embed\/\$\{encodeURIComponent\(videoId\)\}/);
+  assert.match(app, /class="ak-youtube-player-close" data-close-youtube/);
+  assert.match(app, /if \(event\.key === "Escape"\) closeYoutubePlayer\(\)/);
+  assert.doesNotMatch(app, /class="ak-youtube-card" href=/);
 });
