@@ -11,7 +11,7 @@ test("home compacts its banner and freezes feature plus social navigation", () =
   const end = app.indexOf("async function legacyHome()", start);
   const home = app.slice(start, end);
 
-  assert.match(home, /class="ak-home-avatar"[\s\S]*data-home-action="wallet"[\s\S]*data-home-action="zodiac"[\s\S]*data-home-action="share"/);
+  assert.match(home, /class="ak-home-avatar"[\s\S]*data-home-action="wallet"[\s\S]*data-home-action="zodiacPopup"[\s\S]*data-home-action="share"/);
   assert.match(home, /ak-zodiac-icon[\s\S]*<svg/);
   assert.match(home, /ak-share-qr-icon[\s\S]*<svg/);
   assert.doesNotMatch(home, /dateText|greeting/);
@@ -33,4 +33,21 @@ test("exclusive share opens as a closable QR dialog", () => {
   assert.match(app, /function closeShareQr\(\)[\s\S]*classList\.add\("hidden"\)/);
   assert.match(app, /data-close-share/);
   assert.doesNotMatch(app.slice(app.indexOf("async function showShareQr()"), app.indexOf("async function copyInvite()")), /scrollIntoView|site-home-frame/);
+});
+
+
+test("home zodiac opens a closable fortune dialog without changing tabs", () => {
+  const app = source("public/app.js");
+  const css = source("public/akaffit.css");
+  const homeStart = app.indexOf("async function home()");
+  const homeEnd = app.indexOf("async function legacyHome()", homeStart);
+  const home = app.slice(homeStart, homeEnd);
+
+  assert.match(home, /data-home-action="zodiacPopup"/);
+  assert.match(app, /if\(action==="zodiacPopup"\)return showZodiacDialog\(\)/);
+  assert.match(app, /function showZodiacDialog\(\)[\s\S]*dialog\.className = "ak-zodiac-dialog"/);
+  assert.match(app, /class="ak-zodiac-close" data-close-zodiac aria-label="關閉星座運勢">×/);
+  assert.match(app, /function zodiacFortuneMarkup\(fortune\)/);
+  assert.match(css, /\.ak-zodiac-dialog\{position:fixed/);
+  assert.match(css, /\.ak-zodiac-card\{[^}]*max-height:90svh;overflow:auto/);
 });
