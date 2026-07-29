@@ -1,5 +1,7 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+export const SESSION_COOKIE_NAME = 'akaffit_session';
 
 export function base64UrlEncode(value) {
   const bytes = value instanceof Uint8Array ? value : encoder.encode(value);
@@ -27,9 +29,26 @@ function constantTimeEqual(left, right) {
 }
 
 export async function createSession(userId, secret, now = Date.now()) {
-  const payload = base64UrlEncode(JSON.stringify({ sub: userId, iat: Math.floor(now / 1000), exp: Math.floor(now / 1000) + 60 * 60 * 24 * 7 }));
+  const payload = base64UrlEncode(JSON.stringify({ sub: userId, iat: Math.floor(now / 1000), exp: Math.floor(now / 1000) + SESSION_MAX_AGE_SECONDS }));
   const signature = base64UrlEncode(await hmac(payload, secret));
   return `${payload}.${signature}`;
+}
+
+export function sessionTokenFromCookie(cookieHeader = '') {
+  for (const part of String(cookieHeader).split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 0) continue;
+    const name = part.slice(0, separator).trim();
+    if (name !== SESSION_COOKIE_NAME) continue;
+    try { return decodeURIComponent(part.slice(separator + 1).trim()); }
+    catch { return ''; }
+  }
+  return '';
+}
+
+export function sessionCookie(token, maxAge = SESSION_MAX_AGE_SECONDS) {
+  const value = token ? encodeURIComponent(token) : '';
+  return `${SESSION_COOKIE_NAME}=${value}; Path=/; Max-Age=${Math.max(0, Number(maxAge) || 0)}; HttpOnly; Secure; SameSite=Lax`;
 }
 
 export async function verifySession(token, secret, now = Date.now()) {

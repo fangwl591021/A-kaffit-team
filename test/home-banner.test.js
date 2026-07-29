@@ -16,6 +16,7 @@ test("home reuses the compact aiweb member banner", () => {
   assert.match(home, /會員專區/);
   assert.doesNotMatch(home, /dateText|greeting/);
   assert.match(home, /有點開心/);
+  assert.match(home, /<strong>\$\{format\(wallet\.balance\)\}<\/strong><span>有點開心<\/span>/);
   assert.doesNotMatch(home, /商脈點數/);
   assert.match(home, /專屬分享/);
   assert.match(home, /data-home-action="wallet"/);

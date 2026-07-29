@@ -1,5 +1,8 @@
 ﻿import {
   createSession,
+  SESSION_MAX_AGE_SECONDS,
+  sessionCookie,
+  sessionTokenFromCookie,
   sha256,
   verifyLineAccessToken,
   verifyLineIdToken,
@@ -137,12 +140,13 @@ import {
   updateBlogPost,
 } from "./blog.js";
 
-const json = (data, status = 200) =>
+const json = (data, status = 200, extraHeaders = {}) =>
   new Response(JSON.stringify(data), {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
+      ...extraHeaders,
     },
   });
 
@@ -348,12 +352,15 @@ function bearerToken(request) {
 
 async function currentMember(request, env) {
   if (!env.SESSION_SIGNING_SECRET) return null;
-  const session = await verifySession(
+  const tokens = [
     bearerToken(request),
-    env.SESSION_SIGNING_SECRET,
-  );
-  if (!session) return null;
-  return getMember(env.DB, session.sub);
+    sessionTokenFromCookie(request.headers.get("cookie") || ""),
+  ].filter(Boolean);
+  for (const token of new Set(tokens)) {
+    const session = await verifySession(token, env.SESSION_SIGNING_SECRET);
+    if (session) return getMember(env.DB, session.sub);
+  }
+  return null;
 }
 
 async function currentMemberLineSubject(db, userId) {
@@ -933,8 +940,9 @@ async function app(request, env, ctx) {
       env.SESSION_SIGNING_SECRET,
     );
     return json(
-      { success: true, ...result, sessionToken, expiresIn: 604800 },
+      { success: true, ...result, sessionToken, expiresIn: SESSION_MAX_AGE_SECONDS },
       result.created ? 201 : 200,
+      { "set-cookie": sessionCookie(sessionToken) },
     );
   }
 
@@ -966,17 +974,34 @@ async function app(request, env, ctx) {
           idempotencyKey: `share_referral:${result.member.userId}`,
           metadata: { referredUserId: result.member.userId },
         });
-      }      const sessionToken = await createSession(result.member.userId, env.SESSION_SIGNING_SECRET);
-      return json({ success: true, ...result, sessionToken, expiresIn: 604800 }, result.created ? 201 : 200);
+      }
+      const sessionToken = await createSession(result.member.userId, env.SESSION_SIGNING_SECRET);
+      return json(
+        { success: true, ...result, sessionToken, expiresIn: SESSION_MAX_AGE_SECONDS },
+        result.created ? 201 : 200,
+        { "set-cookie": sessionCookie(sessionToken) },
+      );
     } catch (error) {
       return badRequest(error.message || "手機生日註冊失敗");
     }
+  }
+  if (request.method === "POST" && url.pathname === "/v1/auth/logout") {
+    return json(
+      { success: true },
+      200,
+      { "set-cookie": sessionCookie("", 0) },
+    );
   }
   if (request.method === "GET" && url.pathname === "/v1/me") {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
     const adminAccess = await mergedAdminAccess(env,member);
-    return json({ success: true, member: { ...member, adminAccess } });
+    const refreshedSessionToken = await createSession(member.userId, env.SESSION_SIGNING_SECRET);
+    return json(
+      { success: true, member: { ...member, adminAccess } },
+      200,
+      { "set-cookie": sessionCookie(refreshedSessionToken) },
+    );
   }
 
   if (request.method === "POST" && url.pathname === "/v1/me/logo") {
