@@ -198,12 +198,12 @@ export async function getTaskChannels(db, userId) {
     WHERE (platform_user_id=? OR platform_user_id IN (
       SELECT alias_user_id FROM member_account_aliases WHERE canonical_user_id=?
     )) AND provider='line_login' AND verification_status='verified' LIMIT 1`).bind(userId, userId).first();
-  return { lineLinked:Boolean(identity), lineEnabled:true, telegramEnabled:false, telegramChatId:"" };
+  return { lineLinked:Boolean(identity), lineEnabled:false, telegramEnabled:false, telegramChatId:"" };
 }
 
 export async function saveTaskChannels(db, userId, body = {}) {
   const telegramChatId = text(body.telegramChatId, 100);
-  const lineEnabled = body.lineEnabled === false ? 0 : 1;
+  const lineEnabled = body.lineEnabled === true ? 1 : 0;
   const telegramEnabled = body.telegramEnabled === true && telegramChatId ? 1 : 0;
   await db.prepare(`INSERT INTO member_task_channels
     (platform_user_id,telegram_chat_id,line_enabled,telegram_enabled,updated_at)

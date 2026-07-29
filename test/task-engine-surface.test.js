@@ -4,6 +4,7 @@ import test from "node:test";
 
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const worker = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+const taskEngine = readFileSync(new URL("../src/task-engine.js", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../migrations/0042_ai_task_engine.sql", import.meta.url), "utf8");
 
 test("Task Engine is reachable from home and supports the complete feedback loop", () => {
@@ -30,4 +31,10 @@ test("Task Engine migration preserves history and backfills existing card CRM ta
   assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_task_deliveries/);
   assert.match(migration, /task_backfill_/);
   assert.match(migration, /FROM personal_calendar_events/);
+});
+test("LINE OA remains available in the backend but is dormant and hidden", () => {
+  assert.doesNotMatch(app, /taskLineEnabled|使用 LINE Push|LINE Push 可用/);
+  assert.match(taskEngine, /async function pushLine/);
+  assert.match(taskEngine, /lineEnabled:false/);
+  assert.match(taskEngine, /body\.lineEnabled === true/);
 });
