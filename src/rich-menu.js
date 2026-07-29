@@ -32,6 +32,13 @@ async function decryptToken(row, secret) {
   return decoder.decode(decrypted);
 }
 
+export async function getLineAccessToken(db, secret) {
+  const row = await db.prepare("SELECT * FROM line_channel_settings WHERE id='primary' LIMIT 1").first();
+  if (!row) return '';
+  try { return await decryptToken(row, secret); }
+  catch { return ''; }
+}
+
 async function lineRequest(path, token, init = {}) {
   return fetch(`https://api.line.me${path}`, {
     ...init,

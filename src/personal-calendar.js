@@ -82,6 +82,20 @@ async function ensureSystemLabels(db, userId) {
   }
 }
 
+async function ensureFirstTaskEngineRecord(db, userId, contactCardId, event) {
+  const taskId = `task_backfill_${event.id}`;
+  await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO ai_tasks
+      (id,platform_user_id,contact_card_id,title,description,due_at,priority,status,source,ai_status)
+      VALUES (?,?,?,?,?,?,'normal','pending','card_crm','idle')`)
+      .bind(taskId,userId,contactCardId,event.title,event.description,event.starts_at),
+    db.prepare(`INSERT OR IGNORE INTO ai_task_events
+      (id,task_id,platform_user_id,event_type,note,metadata_json)
+      VALUES (?,?,?,'created',?,'{"source":"card_crm"}')`)
+      .bind(`task_event_backfill_${event.id}`,taskId,userId,event.description),
+  ]);
+  return taskId;
+}
 export async function ensureContactFirstTask(db, userId, contactCardId, task = {}) {
   await ensurePersonalCalendarSchema(db);
   await ensureSystemLabels(db, userId);
@@ -91,7 +105,7 @@ export async function ensureContactFirstTask(db, userId, contactCardId, task = {
   const existing = await db.prepare(`SELECT id,title,description,starts_at,ends_at FROM personal_calendar_events
     WHERE platform_user_id=? AND contact_card_id=? AND status='active' AND instr(description,'[AI智慧名片CRM]')=1
     ORDER BY created_at ASC LIMIT 1`).bind(userId, contactCardId).first();
-  if (existing) return { id:existing.id, existing:true };
+  if (existing) { const taskId=await ensureFirstTaskEngineRecord(db,userId,contactCardId,existing); return { id:existing.id, taskId, existing:true }; }
   const label = await db.prepare("SELECT id FROM personal_calendar_labels WHERE platform_user_id=? AND source_type='personal' AND is_system=1 ORDER BY created_at ASC LIMIT 1")
     .bind(userId).first();
   if (!label) throw new Error("找不到個人行程標籤");
@@ -105,7 +119,8 @@ export async function ensureContactFirstTask(db, userId, contactCardId, task = {
     (id,platform_user_id,label_id,contact_card_id,title,description,location,starts_at,ends_at,all_day,reminder_minutes,recurrence)
     VALUES (?,?,?,?,?,?,?,?,?,0,1440,'none')`)
     .bind(id,userId,label.id,contactCardId,title,description,"",startsAt.toISOString(),endsAt.toISOString()).run();
-  return { id, existing:false };
+  const taskId=await ensureFirstTaskEngineRecord(db,userId,contactCardId,{id,title,description,starts_at:startsAt.toISOString()});
+  return { id, taskId, existing:false };
 }
 function mapLabel(row) {
   return {

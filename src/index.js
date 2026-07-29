@@ -46,6 +46,7 @@ import { issueWalletToken, resolveWalletToken } from "./wallet-qr.js";
 import { getMyCard, getPublicCard, saveMyCard } from "./cards.js";
 import {
   getLineTokenStatus,
+  getLineAccessToken,
   handleRichMenuAction,
   saveLineToken,
   testSavedLineToken,
@@ -121,6 +122,15 @@ import {
   parseCalendarVoice,
 } from "./calendar-voice.js";
 import { buildMatchingCandidates, isSupportedMatchingQuery, matchContacts, SMART_MATCH_SCOPE_MESSAGE } from "./smart-matching.js";
+import {
+  actOnTask,
+  createTask,
+  dispatchDueTaskPushes,
+  dispatchTaskPush,
+  generateNextTask,
+  listTasks,
+  saveTaskChannels,
+} from "./task-engine.js";
 import {
   findCachedSmartMatch,
   listContactSmartMatchHistory,
@@ -1057,6 +1067,60 @@ async function app(request, env, ctx) {
     }
   }
 
+  if (url.pathname === "/v1/tasks" && request.method === "GET") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      const data=await listTasks(env.DB, member.userId, { status:url.searchParams.get("status") || "", limit:url.searchParams.get("limit") || 100 });
+      const lineToken=env.LINE_CHANNEL_ACCESS_TOKEN || await getLineAccessToken(env.DB,env.SESSION_SIGNING_SECRET);
+      return json({ success:true, ...data, pushCapabilities:{ lineConfigured:Boolean(lineToken), telegramConfigured:Boolean(env.TELEGRAM_BOT_TOKEN) } });
+    }
+    catch (error) { return json({ success:false, error:error.message || "任務中心讀取失敗" }, 400); }
+  }
+  if (url.pathname === "/v1/tasks" && request.method === "POST") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      const task = await createTask(env.DB, member.userId, (await readJson(request)) || {});
+      const notify = (async () => {
+        const lineToken = env.LINE_CHANNEL_ACCESS_TOKEN || await getLineAccessToken(env.DB, env.SESSION_SIGNING_SECRET);
+        return dispatchTaskPush(env.DB, env, task.id, lineToken);
+      })();
+      if (ctx?.waitUntil) ctx.waitUntil(notify); else notify.catch((error) => console.error("Task push failed", error));
+      return json({ success:true, task }, 201);
+    } catch (error) { return json({ success:false, error:error.message || "任務建立失敗" }, 400); }
+  }
+  if (url.pathname === "/v1/tasks/channels" && request.method === "PUT") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try { return json({ success:true, channel:await saveTaskChannels(env.DB, member.userId, (await readJson(request)) || {}) }); }
+    catch (error) { return json({ success:false, error:error.message || "推播設定儲存失敗" }, 400); }
+  }
+  const taskActionMatch = url.pathname.match(/^\/v1\/tasks\/([^/]+)\/action$/);
+  if (taskActionMatch && request.method === "PATCH") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      const result = await actOnTask(env.DB, member.userId, decodeURIComponent(taskActionMatch[1]), (await readJson(request)) || {});
+      if (result.needsAiNext) {
+        const next = generateNextTask(env.DB, env.MLM_WORKER, member.userId, result.task.id).catch((error) => console.error("Task Engine next-step generation failed", error));
+        if (ctx?.waitUntil) ctx.waitUntil(next);
+      }
+      return json({ success:true, ...result });
+    } catch (error) { return json({ success:false, error:error.message || "任務回報失敗" }, 400); }
+  }
+  const taskPushMatch = url.pathname.match(/^\/v1\/tasks\/([^/]+)\/push$/);
+  if (taskPushMatch && request.method === "POST") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      const taskId = decodeURIComponent(taskPushMatch[1]);
+      const owned = await env.DB.prepare("SELECT id FROM ai_tasks WHERE id=? AND platform_user_id=?").bind(taskId, member.userId).first();
+      if (!owned) return json({ success:false, error:"找不到這筆任務" }, 404);
+      const lineToken = env.LINE_CHANNEL_ACCESS_TOKEN || await getLineAccessToken(env.DB, env.SESSION_SIGNING_SECRET);
+      return json({ success:true, deliveries:await dispatchTaskPush(env.DB, env, taskId, lineToken) });
+    } catch (error) { return json({ success:false, error:error.message || "任務推播失敗" }, 400); }
+  }
   if (url.pathname === "/v1/personal-calendar" && request.method === "GET") {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
@@ -2494,6 +2558,13 @@ async function runSystemAiCardCrmBackfill(env) {
   }
 }
 
+async function runDueTaskPushes(env) {
+  try {
+    const lineToken = env.LINE_CHANNEL_ACCESS_TOKEN || await getLineAccessToken(env.DB, env.SESSION_SIGNING_SECRET);
+    const result = await dispatchDueTaskPushes(env.DB, env, lineToken);
+    console.log("Task Engine due notifications completed", { taskCount:result.length });
+  } catch (error) { console.error("Scheduled Task Engine push failed", error); }
+}
 async function runMlmCourseSync(env) {
   try {
     const result = await syncMlmCourses(env);
@@ -2506,7 +2577,7 @@ async function runMlmCourseSync(env) {
 export default {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS")
-      return new Response(null, { headers: { allow: "GET, HEAD, POST, PUT, DELETE, OPTIONS" } });
+      return new Response(null, { headers: { allow: "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS" } });
     try {
       return await app(request, env, ctx);
     } catch (error) {
@@ -2519,5 +2590,6 @@ export default {
     ctx.waitUntil(runSystemAiCardCrmBackfill(env));
     ctx.waitUntil(runMlmCourseSync(env));
     ctx.waitUntil(retryPendingCardCollectionRewards(env));
+    ctx.waitUntil(runDueTaskPushes(env));
   },
 };
