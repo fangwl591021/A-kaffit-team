@@ -12,7 +12,7 @@ test("home reuses the compact aiweb member banner", () => {
   const home = app.slice(start, end);
 
   assert.match(home, /member-portal ak-home-banner/);
-  assert.match(home, /portal-profile/);
+  assert.doesNotMatch(home, /portal-profile|avatar\(\)|dateText|greeting/);
   assert.match(home, /有點開心/);
   assert.doesNotMatch(home, /商脈點數/);
   assert.match(home, /專屬分享/);
