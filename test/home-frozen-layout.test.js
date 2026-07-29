@@ -25,7 +25,8 @@ test("home uses a compact member summary, shared task toggle, and social-first v
   assert.match(css, /\.ak-home-task-list\{max-height:172px;[^}]*overflow-y:auto/);
   assert.match(css, /\.ak-frozen-nav \.ak-feature-grid\{[^}]*grid-template-columns:repeat\(5/);
   assert.match(css, /\.ak-frozen-nav \.ak-feature-grid button\{[^}]*min-height:62px/);
-  assert.match(css, /\.ak-home-content>\.ak-content-tabs button\{[^}]*min-height:45px/);
+  assert.match(css, /\.ak-home-content>\.ak-content-tabs button\{[^}]*min-height:54px/);
+  assert.equal((home.match(/data-content-view="[^"]+"><svg/g) || []).length, 5);
   assert.match(css, /\.ak-instagram-panel\{[^}]*overflow-y:auto/);
 });
 

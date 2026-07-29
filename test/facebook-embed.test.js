@@ -7,7 +7,7 @@ const source = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "u
 test("home switches to the requested A’kaffit Facebook Page Plugin", () => {
   const app = source("public/app.js");
   const css = source("public/akaffit.css");
-  assert.match(app, /data-content-view="facebook">Facebook/);
+  assert.match(app, /data-content-view="facebook"><svg[\s\S]*?<span>Facebook<\/span>/);
   assert.match(app, /data-content-panel="facebook"/);
   assert.match(app, /facebook\.com\/plugins\/page\.php\?href=/);
   assert.match(app, /61565353201161/);

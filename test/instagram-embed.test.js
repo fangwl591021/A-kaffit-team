@@ -7,7 +7,7 @@ const source = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "u
 test("home embeds the official A’kaffit Instagram profile", () => {
   const app = source("public/app.js");
   const css = source("public/akaffit.css");
-  assert.match(app, /data-content-view="instagram">Instagram/);
+  assert.match(app, /data-content-view="instagram"><svg[\s\S]*?<span>Instagram<\/span>/);
   assert.match(app, /data-content-panel="instagram"/);
   assert.match(app, /https:\/\/www\.instagram\.com\/akaffit\/embed\//);
   assert.match(app, /class="ak-instagram-frame"/);

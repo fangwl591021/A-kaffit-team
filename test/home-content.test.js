@@ -1,4 +1,4 @@
-﻿import test from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
@@ -11,11 +11,11 @@ test("home exposes daily check-in and the directly imported official site", () =
   assert.match(home, /class="ak-official-import ak-content-panel"/);
   assert.match(home, /class="ak-official-import-frame"/);
   assert.match(home, /src="\/akaffit-official"/);
-  assert.match(home, /data-content-view="youtube">YouTube/);
-  assert.match(home, /data-content-view="facebook">Facebook/);
-  assert.match(home, /data-content-view="instagram">Instagram/);
-  assert.match(home, /data-content-view="official">官方網站/);
-  assert.match(home, /data-content-view="academy">咖啡學院/);
+  assert.match(home, /data-content-view="youtube"><svg[\s\S]*?<span>YouTube<\/span>/);
+  assert.match(home, /data-content-view="facebook"><svg[\s\S]*?<span>Facebook<\/span>/);
+  assert.match(home, /data-content-view="instagram"><svg[\s\S]*?<span>Instagram<\/span>/);
+  assert.match(home, /data-content-view="official"><svg[\s\S]*?<span>官方網站<\/span>/);
+  assert.match(home, /data-content-view="academy"><svg[\s\S]*?<span>咖啡學院<\/span>/);
   assert.match(home, /data-content-panel="academy"[\s\S]*內容建置中/);
   assert.match(home, /data-content-panel="facebook"/);
   assert.match(home, /data-content-panel="instagram"/);
