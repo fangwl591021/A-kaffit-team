@@ -1,4 +1,4 @@
-const ANALYSIS_VERSION='line-fate-v1';
+const ANALYSIS_VERSION='line-fate-v2-personality';
 const OUTPUT_KEYS = {Personality:'personality',Hobbies:'interests',Wealth:'wealth',Health:'health',Career:'career'};
 const INSIGHT_KEYS = Object.values(OUTPUT_KEYS);
 const INSIGHTS_SCHEMA = {
@@ -33,10 +33,22 @@ export async function queueMemberCrmInsight(db,userId) {
 }
 
 async function memberFacts(db,userId) {
-  return db.prepare(`SELECT mp.display_name,mp.phone,mp.birthday,
+  const profile=await db.prepare(`SELECT mp.display_name,mp.phone,mp.birthday,
       pc.company_name,pc.job_title,pc.department,pc.service_description
     FROM member_profiles mp LEFT JOIN personal_cards pc ON pc.platform_user_id=mp.platform_user_id
     WHERE mp.platform_user_id=?`).bind(userId).first();
+  if(!profile)return null;
+  try {
+    const assessmentRows=await db.prepare(`SELECT assessment_type,result_code,result_json FROM member_personality_assessments
+      WHERE platform_user_id=? ORDER BY completed_at DESC,id DESC`).bind(userId).all();
+    const latest={};
+    for(const row of assessmentRows.results || [])if(!latest[row.assessment_type]){
+      let result={};try{result=JSON.parse(row.result_json || '{}') || {}}catch{}
+      latest[row.assessment_type]={code:text(row.result_code,40),headline:text(result.headline,120),scores:result.scores || {}};
+    }
+    profile.personality_assessments=latest;
+  } catch { profile.personality_assessments={}; }
+  return profile;
 }
 
 async function callAiResponses(provider,body) {
@@ -57,10 +69,10 @@ async function callAiResponses(provider,body) {
 export async function generateMemberCrmInsights(db,userId,provider,model) {
   const source=await memberFacts(db,userId);
   if(!source)throw new Error('找不到會員資料');
-  const facts={name:text(source.display_name,120),mobile:text(source.phone,40).replace(/[^0-9+]/g,''),birthday:text(source.birthday,10),company:text(source.company_name,180),title:text(source.job_title,120)};
+  const facts={name:text(source.display_name,120),mobile:text(source.phone,40).replace(/[^0-9+]/g,''),birthday:text(source.birthday,10),company:text(source.company_name,180),title:text(source.job_title,120),personalityAssessments:text(JSON.stringify(source.personality_assessments || {}),1600)};
   const result=await callAiResponses(provider,{
       model:model || 'gpt-5.6-terra',reasoning:{effort:'low'},max_output_tokens:900,
-      input:[{role:'user',content:`你是一位專業的商務 AI 心理與命理分析專家。請完全依照 LINE- 專案的五大標籤規則，根據姓名用字、手機號碼頻率與尾數、生日、公司及職稱，進行商務人格分析。\n\n姓名：${facts.name || '未知'}\n手機：${facts.mobile || '未知'}\n生日：${facts.birthday || '未知'}\n公司：${facts.company || '未知'}\n職稱：${facts.title || '未知'}\n\n分析邏輯與必含維度：\n1. 始終依姓名字形判斷行動／思考型、發音判斷外向／內斂、結構判斷主導／依附。\n2. 手機號碼依數字頻率分析（1領導、2協調、3表達、4穩定、5自由、6責任、7分析、8成就、9理想），以尾數判斷快攻／慢養決策模式，以奇偶比判斷衝動／保守。\n3. 有生日時，融合八字、紫微斗數、生命靈數與東西方星座學，分析先天傾向、潛能與目前適合的商務互動方式；資料不足時不可虛構精確命盤。\n4. 五項結果必須明確融合：VAK 感官接收偏好（視覺／聽覺／觸覺）、思考與決策模式（分析／數據／直覺）、行為與風險偏好（積極／消極、冒險／保守）。\n5. Personality、Hobbies、Wealth、Health、Career 每項必須為 20 至 40 個繁體中文字的完整情境描述，同時包含具體特徵與商務應對建議，不得只給單詞。\n6. Wealth 不得宣稱實際收入或資產；Health 不得診斷疾病；不可捏造獎項、客戶、年資、家庭、宗教或政治資訊。\n\n只回傳符合指定格式的 JSON。`}],
+      input:[{role:'user',content:`你是一位專業的商務 AI 心理與命理分析專家。請完全依照 LINE- 專案的五大標籤規則，根據姓名用字、手機號碼頻率與尾數、生日、公司及職稱，進行商務人格分析。\n\n姓名：${facts.name || '未知'}\n手機：${facts.mobile || '未知'}\n生日：${facts.birthday || '未知'}\n公司：${facts.company || '未知'}\n職稱：${facts.title || '未知'}\n已完成性格測驗（只採用實際作答結果）：${facts.personalityAssessments || '尚未完成'}\n\n分析邏輯與必含維度：\n1. 始終依姓名字形判斷行動／思考型、發音判斷外向／內斂、結構判斷主導／依附。\n2. 手機號碼依數字頻率分析（1領導、2協調、3表達、4穩定、5自由、6責任、7分析、8成就、9理想），以尾數判斷快攻／慢養決策模式，以奇偶比判斷衝動／保守。\n3. 有生日時，融合八字、紫微斗數、生命靈數與東西方星座學，分析先天傾向、潛能與目前適合的商務互動方式；資料不足時不可虛構精確命盤。\n4. 五項結果必須明確融合：VAK 感官接收偏好（視覺／聽覺／觸覺）、思考與決策模式（分析／數據／直覺）、行為與風險偏好（積極／消極、冒險／保守）。\n5. Personality、Hobbies、Wealth、Health、Career 每項必須為 20 至 40 個繁體中文字的完整情境描述，同時包含具體特徵與商務應對建議，不得只給單詞。\n6. Wealth 不得宣稱實際收入或資產；Health 不得診斷疾病；不可捏造獎項、客戶、年資、家庭、宗教或政治資訊。\n\n只回傳符合指定格式的 JSON。`}],
       text:{format:{type:'json_schema',name:'member_crm_five_insights',strict:true,schema:INSIGHTS_SCHEMA}},
   });
   const outputText=result.output_text || result.output?.flatMap((item)=>item.content || []).find((item)=>item.type==='output_text')?.text;

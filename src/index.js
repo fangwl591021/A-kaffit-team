@@ -1,4 +1,4 @@
-﻿import {
+import {
   createSession,
   SESSION_MAX_AGE_SECONDS,
   sessionCookie,
@@ -107,6 +107,11 @@ import {
   queueMemberCrmInsight,
   queueSystemMemberCrmInsightBackfill,
 } from "./member-crm-insights.js";
+import {
+  listPersonalityAssessmentResults,
+  publicPersonalityAssessments,
+  savePersonalityAssessment,
+} from "./personality-assessments.js";
 import {
   processMemberMatchRankings,
   queueMemberMatchRankingRefresh,
@@ -1060,6 +1065,29 @@ async function app(request, env, ctx) {
       analysis = { ...analysis, status:"queued", error:"" };
     }
     return json({ success:true, analysis });
+  }
+  if (request.method === "GET" && url.pathname === "/v1/personality-assessments") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      const results = await listPersonalityAssessmentResults(env.DB, member.userId);
+      return json({ success:true, assessments:publicPersonalityAssessments(), results });
+    } catch (error) {
+      return badRequest(error.message || "性格測驗讀取失敗");
+    }
+  }
+  if (request.method === "POST" && url.pathname === "/v1/personality-assessments") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      const body = await request.json();
+      const result = await savePersonalityAssessment(env.DB, member.userId, body?.type, body?.answers);
+      await queueMemberCrmInsight(env.DB, member.userId);
+      scheduleMemberCrmInsights(env, ctx, member.userId);
+      return json({ success:true, result }, 201);
+    } catch (error) {
+      return badRequest(error.message || "性格測驗儲存失敗");
+    }
   }
   if (request.method === "POST" && url.pathname === "/v1/me/logo") {
     const member = await currentMember(request, env);

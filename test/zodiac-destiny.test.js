@@ -15,6 +15,10 @@ test("zodiac destiny popup exposes all requested analysis sources and today navi
   assert.match(app, /今日導航卡/);
   assert.match(app, /不可僅憑生日推測人格類型/);
   assert.match(app, /需要出生時辰才能建立可靠命盤/);
+  assert.match(app, /data-assessment-type/);
+  assert.match(app, /function openPersonalityAssessment/);
+  assert.match(app, /\/v1\/personality-assessments/);
+  assert.match(app, /完成並儲存結果/);
 });
 
 test("destiny analysis API is authenticated and reuses the existing member AI engine", () => {
@@ -30,4 +34,6 @@ test("destiny popup remains scrollable and compact on phones", () => {
   assert.match(css, /\.destiny-source-grid\{[^}]*grid-template-columns:repeat\(2/);
   assert.match(css, /\.destiny-navigation\{[^}]*background:var\(--ak-deep\)/);
   assert.match(css, /@media\(max-width:390px\)[\s\S]*\.ak-zodiac-card\{max-height:calc\(100svh - 16px\)/);
+  assert.match(css, /\.personality-assessment-dialog\{[^}]*position:fixed/);
+  assert.match(css, /\.personality-assessment-sheet\{[^}]*max-height:calc\(100svh - 28px\)/);
 });
