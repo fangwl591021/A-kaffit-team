@@ -99,7 +99,6 @@ function switchPage(page) {
     courses: ["課程／活動", "活動清單、公開設定與場次管理"],
     calendar: ["課程／活動", "行事曆、活動 QR、報名與簽到"],
     carousel: ["每日輪播贈點", "設定圖像、影片與觀看門檻"],
-    blog: ["網誌管理", "建立文章、分類並控制前台公開狀態"],
     richmenu: ["圖文選單管理", "上傳底圖、框選熱區並部署至 LINE"],
     settings: ["系統設定", "登入、點數錢包與導流設定"],
   };
@@ -108,7 +107,6 @@ function switchPage(page) {
   if (page === "members") loadMembers();
   if (page === "cards") loadAdminCards();
   if (page === "carousel") loadCheckinTemplate();
-  if (page === "blog") loadBlogPosts();
   if (page === "points") loadPointRules();
   if (page === "courses") loadCourses();
   if (page === "calendar") loadCalendar();
@@ -759,85 +757,3 @@ $("#uploadVideoLibrary")?.addEventListener("click",event=>uploadVideoLibrary(eve
 document.querySelectorAll("[data-close-video-library]").forEach(button=>button.addEventListener("click",closeVideoLibrary));
 $("#videoLibraryList")?.addEventListener("click",event=>{const button=event.target.closest("[data-video-action]"),row=event.target.closest("[data-video-asset]");if(!button||!row)return;const asset=videoLibraryAssets.find(item=>item.id===row.dataset.videoAsset);if(!asset)return;if(button.dataset.videoAction==="choose")chooseVideoAsset(asset);if(button.dataset.videoAction==="delete")deleteVideoAsset(asset,button);if(button.dataset.videoAction==="preview")window.open(asset.videoUrl,"_blank","noopener")});
 $("#copyTemplateEntry").addEventListener("click", (event) => withButtonFeedback(event.currentTarget, async () => { await navigator.clipboard.writeText(dailyEntryUrl()); templateStatus("活動入口網址已複製。", true); }, {busy:"複製中…",success:"已複製"}));
-
-
-let blogPosts = [];
-let blogCategories = [];
-function resetBlogForm() {
-  $("#blogForm")?.reset();
-  if ($("#blogId")) $("#blogId").value = "";
-  if ($("#blogSort")) $("#blogSort").value = "0";
-  if ($("#blogStatus")) $("#blogStatus").value = "draft";
-}
-function blogPayload() {
-  return {
-    title: $("#blogTitle").value.trim(),
-    slug: $("#blogSlug").value.trim(),
-    category: $("#blogCategory").value,
-    status: $("#blogStatus").value,
-    coverImageUrl: $("#blogCover").value.trim(),
-    excerpt: $("#blogExcerpt").value.trim(),
-    content: $("#blogContent").value.trim(),
-    sortOrder: Number($("#blogSort").value) || 0,
-  };
-}
-function renderBlogPosts() {
-  const body = $("#blogList");
-  if (!body) return;
-  body.innerHTML = blogPosts.length ? blogPosts.map((post) => `<tr data-blog-id="${esc(post.id)}"><td><b>${esc(post.title)}</b><small class="blog-slug">/${esc(post.slug)}</small></td><td>${esc(post.category)}</td><td><span class="crm-status ${post.status === "published" ? "complete" : "pending"}">${post.status === "published" ? "公開" : "草稿"}</span></td><td>${esc(post.updatedAt || post.createdAt)}</td><td><div class="checkinDirectoryActions"><button class="templateDirEdit" data-blog-action="edit" type="button">編輯</button><button class="templateDirDelete" data-blog-action="delete" type="button">刪除</button></div></td></tr>`).join("") : '<tr><td colspan="5" class="crm-empty">尚未建立文章</td></tr>';
-}
-async function loadBlogPosts() {
-  try {
-    const data = await api("/v1/admin/blog/posts");
-    blogPosts = data.posts || [];
-    blogCategories = data.categories || [];
-    const select = $("#blogCategory");
-    if (select) {
-      const selected = select.value;
-      select.innerHTML = blogCategories.map((category) => `<option value="${esc(category)}">${esc(category)}</option>`).join("");
-      if (blogCategories.includes(selected)) select.value = selected;
-    }
-    renderBlogPosts();
-  } catch (error) { showStatus(error.message, "error"); }
-}
-function editBlogPost(id) {
-  const post = blogPosts.find((item) => item.id === id);
-  if (!post) return;
-  $("#blogId").value = post.id;
-  $("#blogTitle").value = post.title;
-  $("#blogSlug").value = post.slug;
-  $("#blogCategory").value = post.category;
-  $("#blogStatus").value = post.status;
-  $("#blogCover").value = post.coverImageUrl || "";
-  $("#blogExcerpt").value = post.excerpt || "";
-  $("#blogContent").value = post.content || "";
-  $("#blogSort").value = post.sortOrder || 0;
-  $(".blog-admin-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-$("#blogForm")?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const id = $("#blogId").value;
-  const button = $("#blogSave");
-  try {
-    await withButtonFeedback(button, () => api(id ? `/v1/admin/blog/posts/${encodeURIComponent(id)}` : "/v1/admin/blog/posts", blogPayload(), id ? "PATCH" : "POST"), { busy:"儲存中…", success:"已儲存" });
-    showStatus(id ? "文章已更新" : "文章已建立");
-    resetBlogForm();
-    await loadBlogPosts();
-  } catch (error) { showStatus(error.message, "error"); }
-});
-$("#blogList")?.addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-blog-action]");
-  const row = event.target.closest("[data-blog-id]");
-  if (!button || !row) return;
-  if (button.dataset.blogAction === "edit") return editBlogPost(row.dataset.blogId);
-  const post = blogPosts.find((item) => item.id === row.dataset.blogId);
-  if (!post || !confirm(`確定刪除「${post.title}」？`)) return;
-  try {
-    await withButtonFeedback(button, () => api(`/v1/admin/blog/posts/${encodeURIComponent(post.id)}`, undefined, "DELETE"), { busy:"刪除中…", success:"已刪除" });
-    showStatus("文章已刪除");
-    await loadBlogPosts();
-  } catch (error) { showStatus(error.message, "error"); }
-});
-$("#blogNew")?.addEventListener("click", resetBlogForm);
-$("#blogCancel")?.addEventListener("click", resetBlogForm);
-$("#blogRefresh")?.addEventListener("click", loadBlogPosts);

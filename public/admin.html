@@ -14,9 +14,6 @@
           <img id="adminAvatar" alt="LINE 頭貼" />
           <div><strong id="adminName"></strong><span>目前登入管理員</span></div>
         </div>
-        <a class="mlm-return" href="https://mlm.fangwl591021.workers.dev/console">
-          <span aria-hidden="true">←</span> 返回 MLM 綜合主控台
-        </a>
         <p class="side-label">營運中心</p>
         <nav class="side-nav">
           <button class="nav-item active" data-page="dashboard">
@@ -30,9 +27,6 @@
           </button>
           <button class="nav-item" data-page="points">
             <span>◉</span> 點數規則
-          </button>
-          <button class="nav-item" data-page="blog">
-            <span>▧</span> 網誌管理
           </button>
           <button class="nav-item" data-page="courses" hidden>
             <span>▣</span> 課程／活動
@@ -61,7 +55,6 @@
           <div class="top-actions">
             <span class="health"><i></i> 系統正常</span
             ><button class="outline" id="refresh">↻ 重新同步</button
-            ><a class="outline mlm-top-return" href="https://mlm.fangwl591021.workers.dev/console">← MLM 主控台</a
             ><a class="outline" href="/" target="_blank">▣ 會員前台</a>
           </div>
         </header>
@@ -290,28 +283,6 @@
           </section>
         </section>
 
-        <section class="page" data-content="blog">
-          <section class="panel blog-admin-editor">
-            <div class="panel-head"><div><h2>網誌文章</h2><p>管理會員首頁下方的最新文章與分類。</p></div><button class="secondary" id="blogNew" type="button">新增文章</button></div>
-            <form id="blogForm" class="form-grid">
-              <input id="blogId" type="hidden" />
-              <label class="wide">文章標題<input id="blogTitle" maxlength="120" required placeholder="輸入文章標題" /></label>
-              <label>分類<select id="blogCategory"></select></label>
-              <label>狀態<select id="blogStatus"><option value="draft">草稿</option><option value="published">公開</option></select></label>
-              <label class="wide">網址代稱<input id="blogSlug" maxlength="96" placeholder="留空會依標題自動產生" /></label>
-              <label class="wide">封面圖片網址<input id="blogCover" type="url" placeholder="https://..." /></label>
-              <label class="wide">文章摘要<textarea id="blogExcerpt" maxlength="320" rows="3" placeholder="首頁卡片顯示的短摘要"></textarea></label>
-              <label class="wide">文章內容<textarea id="blogContent" rows="10" placeholder="輸入完整文章內容"></textarea></label>
-              <label>排序<input id="blogSort" type="number" value="0" min="-9999" max="9999" /></label>
-              <div class="blog-form-actions"><button class="primary" id="blogSave" type="submit">儲存文章</button><button class="secondary" id="blogCancel" type="button">清除表單</button></div>
-            </form>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><div><h2>文章清單</h2><p>公開文章會出現在會員首頁；草稿僅後台可見。</p></div><button class="secondary" id="blogRefresh" type="button">重新整理</button></div>
-            <div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>文章</th><th>分類</th><th>狀態</th><th>更新時間</th><th>操作</th></tr></thead><tbody id="blogList"></tbody></table></div>
-          </section>
-        </section>
-
         <section class="page" data-content="settings">
           <section class="panel openai-settings-panel" id="openAISettingsPanel" hidden>
             <div class="panel-head">
@@ -354,6 +325,6 @@
       </section>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <script type="module" src="/admin.js?v=20260728-8"></script>
+    <script type="module" src="/admin.js?v=20260730-9"></script>
   </body>
 </html>

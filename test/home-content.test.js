@@ -37,10 +37,20 @@ test("home exposes daily check-in and the directly imported official site", () =
   assert.doesNotMatch(home, /ak-moment-banner/);
 });
 
-test("admin exposes check-in templates and blog management", () => {
+test("admin is A-kaffit-owned and exposes the Mira-style check-in module", () => {
   const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
-  assert.match(html, /data-page="carousel"(?! hidden)/);
-  assert.match(html, /簽到贈點活動目錄/);
-  assert.match(html, /data-page="blog"/);
-  assert.match(html, /data-content="blog"/);
+  const routeHtml = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const adminJs = readFileSync(new URL("../public/admin.js", import.meta.url), "utf8");
+  const worker = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+  const wrangler = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
+  for (const page of [html, routeHtml]) {
+    assert.match(page, /data-page="carousel"(?! hidden)/);
+    assert.match(page, /簽到贈點活動目錄/);
+    assert.doesNotMatch(page, /data-page="blog"|data-content="blog"|網誌管理/);
+    assert.doesNotMatch(page, /mlm\.fangwl591021\.workers\.dev|MLM 主控台|返回 MLM/);
+    assert.match(page, /\/admin\.js\?v=20260730-9/);
+  }
+  assert.doesNotMatch(adminJs, /loadBlogPosts|網誌管理/);
+  assert.doesNotMatch(worker, /super-admin-status|mlm_super_admin|url\.pathname==="\/admin\/sso"/);
+  assert.doesNotMatch(wrangler, /"\/admin\/sso"/);
 });
