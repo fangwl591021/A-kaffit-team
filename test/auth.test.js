@@ -20,7 +20,7 @@ test('session fails when its signature is changed', async () => {
   assert.equal(await verifySession(`${token}x`, 'test-secret', 1_000_001), null);
 });
 
-test('session remains valid for 30 days and fails after expiry', async () => {
+test('session remains valid for 180 days and fails after expiry', async () => {
   const token = await createSession('usr_abc', 'test-secret', 1_000_000);
   assert.equal((await verifySession(token, 'test-secret', 1_000_000 + (SESSION_MAX_AGE_SECONDS - 1) * 1000)).sub, 'usr_abc');
   assert.equal(await verifySession(token, 'test-secret', 1_000_000 + (SESSION_MAX_AGE_SECONDS + 1) * 1000), null);
@@ -29,7 +29,7 @@ test('session remains valid for 30 days and fails after expiry', async () => {
 test('session cookie is secure, persistent and readable from a cookie header', () => {
   const cookie = sessionCookie('signed.token');
   assert.match(cookie, new RegExp(`^${SESSION_COOKIE_NAME}=signed.token;`));
-  assert.match(cookie, /Max-Age=2592000/);
+  assert.match(cookie, /Max-Age=15552000/);
   assert.match(cookie, /HttpOnly/);
   assert.match(cookie, /Secure/);
   assert.match(cookie, /SameSite=Lax/);

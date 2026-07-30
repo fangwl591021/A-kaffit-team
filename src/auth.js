@@ -1,6 +1,6 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 180;
 export const SESSION_COOKIE_NAME = 'akaffit_session';
 
 export function base64UrlEncode(value) {
