@@ -29,6 +29,16 @@ test("member registration UI includes logo, name, numeric birthday, and repeatab
   assert.doesNotMatch(css, /\.member-logo-preview\{[^}]*border-radius:24px/);
 });
 
+test("member registration opens as an accessible popup while required registration stays blocking", () => {
+  const app = fs.readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+  const css = fs.readFileSync(new URL("../public/akaffit.css", import.meta.url), "utf8");
+  assert.match(app, /async function showProfileDialog\(required = false/);
+  assert.match(app, /class="ak-profile-sheet" role="dialog" aria-modal="true"/);
+  assert.match(app, /required \? "" : `<button type="button" class="ak-profile-close"/);
+  assert.match(app, /if\(action==="profile"\)return showProfileDialog\(false\)/);
+  assert.match(css, /\.ak-profile-dialog\{[^}]*position:fixed[^}]*inset:0/);
+  assert.match(css, /\.ak-profile-sheet\{[^}]*max-height:90svh[^}]*overflow:auto/);
+});
 test("five-tag UI supports explicit retry and automatic refresh", () => {
   const app = fs.readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
   assert.match(app, /recalculate-insights/);
