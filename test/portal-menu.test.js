@@ -4,7 +4,7 @@ import test from "node:test";
 
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 
-test("內頁功能列在個人行程後提供返回首頁", () => {
+test("內頁功能列保留六個功能，返回首頁統一放在 Banner 右側", () => {
   const start = app.indexOf("const portalMenu");
   const end = app.indexOf("function openAiWear", start);
   const menu = app.slice(start, end);
@@ -17,7 +17,13 @@ test("內頁功能列在個人行程後提供返回首頁", () => {
     "zodiac",
     "calendar",
     "tasks",
-    "home",
   ]);
-  assert.ok(menu.includes('data-home-action="calendar"><span>個人行程</span></button><button data-home-action="tasks"><span>AI 任務</span></button><button data-home-action="home"><span>返回首頁</span>'));
+  assert.ok(menu.includes('data-home-action="calendar"><span>個人行程</span></button><button data-home-action="tasks"><span>AI 任務</span>'));
+  assert.ok(!menu.includes('data-home-action="home"'));
+
+  const layoutStart = app.indexOf("function layout");
+  const layoutEnd = app.indexOf("async function login", layoutStart);
+  const layout = app.slice(layoutStart, layoutEnd);
+  assert.ok(layout.includes('class="feature-header-actions"'));
+  assert.ok(layout.includes('data-home-action="home">返回首頁</button>'));
 });
