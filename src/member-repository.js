@@ -17,6 +17,26 @@ export async function resolveCanonicalMemberId(db, userId) {
 const MEMBER_NUMBER_DIGITS = '012356789';
 const MEMBER_NUMBER_WIDTH = 8;
 const MEMBER_NUMBER_LIMIT = (MEMBER_NUMBER_DIGITS.length ** MEMBER_NUMBER_WIDTH) - 1;
+const PUBLIC_MEMBER_INVITE_PREFIX = 'akm-';
+
+export function memberReferralToken(memberNumber) {
+  const normalized = String(memberNumber || '').trim().toUpperCase();
+  if (!/^MB-[012356789]{8}$/.test(normalized)) throw new Error('Invalid system member number');
+  return `${PUBLIC_MEMBER_INVITE_PREFIX}${normalized}`;
+}
+
+export function parseMemberReferralToken(rawToken) {
+  const token = String(rawToken || '').trim();
+  if (!token.toLowerCase().startsWith(PUBLIC_MEMBER_INVITE_PREFIX)) return '';
+  const memberNumber = token.slice(PUBLIC_MEMBER_INVITE_PREFIX.length).toUpperCase();
+  return /^MB-[012356789]{8}$/.test(memberNumber) ? memberNumber : '';
+}
+
+export function memberLiffReferralUrl(liffId, memberNumber) {
+  const normalizedLiffId = String(liffId || '').trim();
+  if (!normalizedLiffId) throw new Error('LIFF is not configured');
+  return `https://liff.line.me/${encodeURIComponent(normalizedLiffId)}?invite=${encodeURIComponent(memberReferralToken(memberNumber))}`;
+}
 
 export function formatMemberNumber(sequence) {
   let value = Number(sequence);
@@ -215,7 +235,7 @@ export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, invi
   await db.batch(statements);
   return { member: await getMember(db, userId), created: true, referralCreated: Boolean(referral) };
 }
-async function resolveInvite(db, inviteToken, referredUserId) {
+export async function resolveInvite(db, inviteToken, referredUserId) {
   const rawToken = String(inviteToken || '').trim();
   if (!rawToken || rawToken.length > 512) return null;
   const tokenHash = await sha256(rawToken);
@@ -224,8 +244,21 @@ async function resolveInvite(db, inviteToken, referredUserId) {
     FROM invite_links
     WHERE token_hash = ? AND status = 'active' AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
   `).bind(tokenHash).first();
-  if (!row || row.inviter_user_id === referredUserId) return null;
-  return { inviteLinkId: row.id, inviterUserId: row.inviter_user_id };
+  if (row) {
+    if (row.inviter_user_id === referredUserId) return null;
+    return { inviteLinkId: row.id, inviterUserId: row.inviter_user_id };
+  }
+  const memberNumber = parseMemberReferralToken(rawToken);
+  if (!memberNumber) return null;
+  const publicReferrer = await db.prepare(`
+    SELECT pu.id AS inviter_user_id
+    FROM member_profiles mp
+    JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'
+    WHERE mp.member_number = ?
+    LIMIT 1
+  `).bind(memberNumber).first();
+  if (!publicReferrer || publicReferrer.inviter_user_id === referredUserId) return null;
+  return { inviteLinkId: null, inviterUserId: publicReferrer.inviter_user_id };
 }
 
 export async function getMember(db, userId) {

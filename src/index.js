@@ -12,6 +12,7 @@ import {
   createInviteLink,
   getAdminAccess,
   getMember,
+  memberLiffReferralUrl,
   newId,
   resolveCanonicalMemberId,
   resolvePhoneBirthdayMember,
@@ -2027,7 +2028,8 @@ async function app(request, env, ctx) {
       ]);
       const targetAccess = await getAdminAccess(env.DB, memberId, env.ADMIN_LINE_SUBJECTS);
       const crmInsights=await getMemberCrmInsight(env.DB,memberId);
-      return json({ success: true, member, crmInsights, access: admin.adminAccess, targetAccess, ledger: ledger.results || [], courses: courses.results || [], checkins: checkins.results || [], referrals: referrals.results || [] });
+      const referralUrl = memberLiffReferralUrl(env.LIFF_ID, member.member_number);
+      return json({ success: true, member, referralUrl, crmInsights, access: admin.adminAccess, targetAccess, ledger: ledger.results || [], courses: courses.results || [], checkins: checkins.results || [], referrals: referrals.results || [] });
     }
     const memberPermissionsMatch = url.pathname.match(/^\/v1\/admin\/members\/([^/]+)\/permissions$/);
     if (request.method === "PATCH" && memberPermissionsMatch) {
