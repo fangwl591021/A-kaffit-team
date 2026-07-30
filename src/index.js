@@ -992,6 +992,17 @@ async function app(request, env, ctx) {
     );
   }
 
+  if (request.method === "GET" && url.pathname === "/v1/destiny-analysis") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    let analysis = await getMemberCrmInsight(env.DB,member.userId);
+    if (!analysis.status || analysis.status === "failed") {
+      await queueMemberCrmInsight(env.DB,member.userId);
+      scheduleMemberCrmInsights(env,ctx,member.userId);
+      analysis = { ...analysis, status:"queued", error:"" };
+    }
+    return json({ success:true, analysis });
+  }
   if (request.method === "POST" && url.pathname === "/v1/me/logo") {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
