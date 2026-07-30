@@ -25,5 +25,7 @@ test("內頁功能列保留六個功能，返回首頁統一放在 Banner 右側
   const layoutEnd = app.indexOf("async function login", layoutStart);
   const layout = app.slice(layoutStart, layoutEnd);
   assert.ok(layout.includes('class="feature-header-actions"'));
-  assert.ok(layout.includes('data-home-action="home">返回首頁</button>'));
+  assert.ok(layout.includes('data-home-action="home" aria-label="返回首頁"'));
+  assert.equal((app.match(/data-home-action="home"/g) || []).length, 1);
+  assert.ok(!app.includes('class="back-card" data-home-action="home"'));
 });
