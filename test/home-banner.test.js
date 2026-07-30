@@ -22,8 +22,9 @@ test("home member summary preserves profile, wallet, and exclusive sharing actio
   assert.match(home, /id="copyInvite"/);
   assert.doesNotMatch(home, /商脈指數|商脈點數|ak-hero|ak-index-card|ak-meter/);
   assert.match(css, /\.ak-member-summary\{[^}]*background:var\(--ak-cream\)/);
-  assert.match(css, /\.ak-member-actions\{display:grid;grid-template-columns:repeat\(3/);
+  assert.match(css, /\.ak-member-actions\{display:grid;grid-template-columns:repeat\(4/);
   assert.match(home, /class="ak-profile-card" data-home-action="profile"[\s\S]*<span>我的<\/span>/);
+  assert.match(home, /class="ak-destiny-card" data-home-action="zodiacPopup"[\s\S]*<span>星座命理<\/span>/);
 });
 
 test("home omits the greeting and centers the profile in the brand row", () => {

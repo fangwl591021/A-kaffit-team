@@ -17,6 +17,7 @@ test("home uses a compact member summary, shared task toggle, and social-first v
   assert.match(home, /class="ak-member-avatar" data-home-action="profile"[\s\S]*\$\{avatar\(\)\}/);
   assert.doesNotMatch(home, /homeGreeting|memberName|早安|午安|晚上好/);
   assert.match(home, /class="ak-point-card" data-home-action="wallet"/);
+  assert.match(home, /class="ak-destiny-card" data-home-action="zodiacPopup"/);
   assert.match(home, /class="ak-qr-card" data-home-action="share"/);
   assert.match(home, /id="homeTaskDetail"[\s\S]*data-home-action="tasks">查看全部任務/);
   assert.match(home, /class="ak-frozen-nav"[\s\S]*class="ak-feature-grid"[\s\S]*data-content-panel="academy"[\s\S]*class="ak-content-tabs"/);
