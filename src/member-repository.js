@@ -202,8 +202,14 @@ export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, invi
     `).bind(normalizedPhone, birthday).first();
   }
   if (existing?.user_id) {
-    await db.prepare('UPDATE external_identities SET last_verified_at = CURRENT_TIMESTAMP WHERE provider = ? AND provider_subject = ?')
-      .bind('phone_birthday', subject).run();
+    await db.prepare(`INSERT INTO external_identities
+      (id, platform_user_id, provider, provider_subject, verification_status, last_verified_at)
+      VALUES (?, ?, 'phone_birthday', ?, 'verified', CURRENT_TIMESTAMP)
+      ON CONFLICT(provider, provider_subject) DO UPDATE SET
+        platform_user_id = excluded.platform_user_id,
+        verification_status = 'verified',
+        last_verified_at = CURRENT_TIMESTAMP`)
+      .bind(newId('identity'), existing.user_id, subject).run();
     let member = await getMember(db, existing.user_id);
     const referral = member?.systemReferrer ? null : await resolveInvite(db, inviteToken, existing.user_id);
     if (referral) {
@@ -212,6 +218,17 @@ export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, invi
       member = await getMember(db, existing.user_id);
     }
     return { member, created: false, referralCreated: Boolean(referral) };
+  }
+  const phoneOwner = await db.prepare(`
+    SELECT mp.platform_user_id, mp.birthday
+    FROM member_profiles mp
+    JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'
+    WHERE mp.phone = ?
+    ORDER BY pu.created_at ASC
+    LIMIT 1
+  `).bind(normalizedPhone).first();
+  if (phoneOwner) {
+    throw new Error('此手機已建立會員，但生日驗證不符。請確認生日，或聯絡管理員協助找回帳號。');
   }
   const userId = newId('usr');
   const memberNumber = await reserveMemberNumber(db);

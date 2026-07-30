@@ -245,12 +245,30 @@ async function openMemberDetail(id) {
     panel.querySelector('.crm-editor')?.insertAdjacentHTML('afterend',renderMemberCrmInsights(data.crmInsights));
     const canAdjustPoints = Boolean(data.access?.canManagePoints);
     const canAssignPermissions = Boolean(data.access?.canManagePermissions) && data.targetAccess?.role !== "owner";
+    const canDeleteMember = Boolean(data.access?.canManagePermissions) && data.targetAccess?.role !== "owner";
     const summary = panel.querySelector(".crm-summary");
     summary?.firstElementChild?.remove();
     summary?.insertAdjacentHTML("beforebegin", `<section class="crm-point-panel"><div><small>可用點數餘額</small><strong>${format(member.points_balance)} <i>點</i></strong></div>${canAdjustPoints ? '<div class="crm-point-actions"><button type="button" data-point-action="grant">＋ 贈點</button><button type="button" data-point-action="deduct">－ 扣點</button></div>' : '<p class="crm-access-note">目前帳號沒有手動調整點數權限。</p>'}</section>`);
     panel.querySelector(".crm-detail-grid")?.insertAdjacentHTML("beforebegin", `<section class="crm-permission-panel"><div class="crm-permission-head"><div><h3>管理權限</h3><p>勾選並儲存後，該會員即可使用自己的 LINE 帳號登入後台。</p></div>${canAssignPermissions ? '<button class="primary" id="saveMemberPermissions">儲存權限</button>' : ""}</div><div class="crm-permission-options"><label><input type="checkbox" id="crmSystemAccess" ${data.targetAccess?.systemAccess ? "checked" : ""} ${canAssignPermissions ? "" : "disabled"}><span><b>系統權限</b><small>可登入 CRM、增扣點數及管理營運內容。</small></span></label><label><input type="checkbox" id="crmOperatorAccess" ${data.targetAccess?.operatorAccess ? "checked" : ""} ${canAssignPermissions ? "" : "disabled"}><span><b>操作員</b><small>可登入 CRM 執行一般作業；不可設定權限或調整點數。</small></span></label></div>${canAssignPermissions ? "" : `<p class="crm-access-note">${data.targetAccess?.role === "owner" ? "此帳號為最高管理者，權限由環境設定保護。" : "只有最高管理者可變更權限。"}</p>`}</section>`);
     $("#closeMemberDetail").onclick = () => panel.classList.add("hidden");
     $("#cancelMemberEdit").onclick = () => panel.classList.add("hidden");
+    if (canDeleteMember) {
+      panel.querySelector(".crm-editor-actions")?.insertAdjacentHTML("afterbegin", '<button type="button" class="crm-delete-member" id="deleteMemberAccount">刪除會員帳號</button>');
+      $("#deleteMemberAccount").onclick = async (event) => {
+        const label = member.display_name || member.member_number || member.id;
+        if (!confirm(`確定刪除「${label}」？\n\n此操作會停用帳號並移除登入識別，但會保留點數與稽核歷史。`)) return;
+        try {
+          await withButtonFeedback(event.currentTarget, async () => {
+            await api(`/v1/admin/members/${encodeURIComponent(id)}`, undefined, "DELETE");
+            showStatus("會員帳號已刪除");
+            panel.classList.add("hidden");
+            await loadMembers();
+          }, { busy:"刪除中…", success:"已刪除" });
+        } catch (error) {
+          showStatus(error.message, "error");
+        }
+      };
+    }
     $("#copyCrmReferralUrl")?.addEventListener("click", async () => {
       try {
         await copyCrmReferralUrl(data.referralUrl, $("#crmReferralUrl"));

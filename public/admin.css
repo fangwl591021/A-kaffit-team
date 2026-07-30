@@ -303,6 +303,20 @@ body {
 .primary:hover {
   background: #079f46;
 }
+.crm-delete-member {
+  border: 1px solid #d94b45;
+  border-radius: 8px;
+  background: #fff;
+  color: #b42318;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 12px 16px;
+  cursor: pointer;
+  margin-right: auto;
+}
+.crm-delete-member:hover {
+  background: #fff1f0;
+}
 .notice-card {
   margin-top: 20px;
   padding: 18px;

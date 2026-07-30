@@ -447,7 +447,8 @@ async function currentMember(request, env) {
     const session = await verifySession(token, env.SESSION_SIGNING_SECRET);
     if (session) {
       const canonicalUserId = await resolveCanonicalMemberId(env.DB, session.sub);
-      return getMember(env.DB, canonicalUserId);
+      const member = await getMember(env.DB, canonicalUserId);
+      if (member?.status === "active") return member;
     }
   }
   return null;
@@ -1998,6 +1999,7 @@ async function app(request, env, ctx) {
         LEFT JOIN referral_relationships rr ON rr.referred_user_id = pu.id AND rr.status = 'active'
         LEFT JOIN member_profiles ref_mp ON ref_mp.platform_user_id = rr.referrer_user_id
         LEFT JOIN admin_member_permissions amp ON amp.platform_user_id = pu.id
+        WHERE pu.status != 'deleted'
         ORDER BY pu.created_at DESC
         LIMIT 500
       `).all();
@@ -2017,7 +2019,7 @@ async function app(request, env, ctx) {
         LEFT JOIN referral_relationships rr ON rr.referred_user_id = pu.id AND rr.status = 'active'
         LEFT JOIN member_profiles ref_mp ON ref_mp.platform_user_id = rr.referrer_user_id
         LEFT JOIN admin_member_permissions amp ON amp.platform_user_id = pu.id
-        WHERE pu.id = ?
+        WHERE pu.id = ? AND pu.status != 'deleted'
       `).bind(memberId).first();
       if (!member) return json({ success: false, error: "Member not found" }, 404);
       const [ledger, courses, checkins, referrals] = await env.DB.batch([
@@ -2030,6 +2032,29 @@ async function app(request, env, ctx) {
       const crmInsights=await getMemberCrmInsight(env.DB,memberId);
       const referralUrl = memberLiffReferralUrl(env.LIFF_ID, member.member_number);
       return json({ success: true, member, referralUrl, crmInsights, access: admin.adminAccess, targetAccess, ledger: ledger.results || [], courses: courses.results || [], checkins: checkins.results || [], referrals: referrals.results || [] });
+    }
+    if (request.method === "DELETE" && memberDetailMatch) {
+      if (!admin.adminAccess.canManagePermissions) return json({ success:false, error:"只有最高管理者可刪除會員帳號" }, 403);
+      const memberId = memberDetailMatch[1];
+      if (memberId === admin.userId) return badRequest("不可刪除目前登入的管理員帳號");
+      const target = await env.DB.prepare("SELECT id,status FROM platform_users WHERE id=?").bind(memberId).first();
+      if (!target || target.status === "deleted") return json({ success:false, error:"Member not found" }, 404);
+      const targetAccess = await getAdminAccess(env.DB, memberId, env.ADMIN_LINE_SUBJECTS);
+      if (targetAccess.role === "owner") return badRequest("不可刪除最高管理者帳號");
+      const activeReferrals = await env.DB.prepare("SELECT COUNT(*) AS count FROM referral_relationships WHERE referrer_user_id=? AND status='active'").bind(memberId).first();
+      if (Number(activeReferrals?.count || 0) > 0) {
+        return json({ success:false, error:`此會員仍有 ${Number(activeReferrals.count)} 位推薦會員，請先重新指定推薦人` }, 409);
+      }
+      await env.DB.batch([
+        env.DB.prepare("UPDATE platform_users SET status='deleted',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(memberId),
+        env.DB.prepare("DELETE FROM external_identities WHERE platform_user_id=?").bind(memberId),
+        env.DB.prepare("UPDATE invite_links SET status='disabled',disabled_at=CURRENT_TIMESTAMP WHERE inviter_user_id=? AND status='active'").bind(memberId),
+        env.DB.prepare("UPDATE referral_relationships SET status='superseded' WHERE referred_user_id=? AND status='active'").bind(memberId),
+        env.DB.prepare("DELETE FROM admin_member_permissions WHERE platform_user_id=?").bind(memberId),
+        env.DB.prepare("INSERT INTO audit_logs (id,actor_user_id,subject_user_id,action,metadata_json) VALUES (?,?,?,'admin.member.deleted',?)")
+          .bind(newId("audit"),admin.userId,memberId,JSON.stringify({mode:"soft_delete",loginIdentitiesRemoved:true})),
+      ]);
+      return json({ success:true, deletedMemberId:memberId });
     }
     const memberPermissionsMatch = url.pathname.match(/^\/v1\/admin\/members\/([^/]+)\/permissions$/);
     if (request.method === "PATCH" && memberPermissionsMatch) {
