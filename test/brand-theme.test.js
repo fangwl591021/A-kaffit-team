@@ -6,6 +6,7 @@ const source = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "u
 
 test("public site uses the coffee-inspired A-kaffit rust theme", () => {
   const css = source("public/akaffit.css");
+  const baseCss = source("public/styles.css");
   const html = source("public/index.html");
 
   assert.match(css, /--ak-primary:#b95121/);
@@ -26,6 +27,9 @@ test("public site uses the coffee-inspired A-kaffit rust theme", () => {
   assert.match(css, /\.ak-home-content>\.ak-content-tabs button\{[^}]*color:var\(--ak-deep\)/);
   assert.match(css, /\.ak-daily-panel \.daily-slide\{[^}]*min\(72vw,320px\)/);
   assert.match(css, /\.ak-daily-panel \.daily-media-frame\{[^}]*max-height:220px/);
+  assert.match(baseCss, /\.media-dialog\{[^}]*z-index:1000[^}]*safe-area-inset-top/);
+  assert.match(baseCss, /\.media-dialog-close\{[^}]*right:8px;top:8px;width:44px;height:44px/);
+  assert.match(html, /\/styles\.css\?v=20260730-62/);
   assert.match(html, /\/akaffit-20260730-32\.css/);
   assert.match(html, /\/app-20260729-96\.js/);
 });
