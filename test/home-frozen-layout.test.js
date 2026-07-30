@@ -78,5 +78,10 @@ test("exclusive share still opens as a closable QR dialog", () => {
   assert.match(app, /id="sharePanel" class="ak-share-dialog hidden" role="dialog" aria-modal="true"/);
   assert.match(app, /class="ak-share-close" data-close-share aria-label="關閉專屬分享">×/);
   assert.match(app, /function closeShareQr\(\)[\s\S]*classList\.add\("hidden"\)/);
-  assert.doesNotMatch(app.slice(app.indexOf("async function showShareQr()"), app.indexOf("async function copyInvite()")), /scrollIntoView|site-home-frame/);
+  const shareQrSource = app.slice(
+    app.indexOf("async function showShareQr()"),
+    app.indexOf("async function copyInvite()"),
+  );
+  assert.doesNotMatch(shareQrSource, /scrollIntoView|site-home-frame/);
+  assert.doesNotMatch(shareQrSource, /60000|60 秒|setTimeout/);
 });

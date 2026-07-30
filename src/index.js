@@ -2581,10 +2581,9 @@ async function app(request, env, ctx) {
       const token = body.token || randomInviteToken();
       try {
         const invite = await createInviteLink(env.DB, member.userId, token);
-      // 邀約入口使用 LIFF URL，讓受邀者可直接完成 LINE Login 並帶回推薦 token。
-      const shareUrl = env.LIFF_ID
-        ? `https://liff.line.me/${env.LIFF_ID}?invite=${encodeURIComponent(invite.token)}`
-        : `${url.origin}/i/${invite.token}`;
+        // 專屬分享是永久推薦入口，固定留在 A-kaffit 網域，
+        // 不與共用 LIFF 入口或限時錢包 QR 綁定。
+        const shareUrl = `${url.origin}/i/${encodeURIComponent(invite.token)}`;
       return json(
         {
           success: true,
@@ -2606,12 +2605,9 @@ async function app(request, env, ctx) {
     const inviteToken = decodeURIComponent(url.pathname.slice(3));
     if (!inviteToken || inviteToken.length > 512)
       return new Response("Invalid invite link", { status: 400 });
-    // 舊版 QR 仍導向 LIFF URL，避免被當成一般內嵌瀏覽器開啟。
-    const loginUrl = env.LIFF_ID
-      ? new URL(`https://liff.line.me/${env.LIFF_ID}`)
-      : new URL("/", url.origin);
-    loginUrl.searchParams.set("invite", inviteToken);
-    return Response.redirect(loginUrl.toString(), 302);
+    const landingUrl = new URL("/", url.origin);
+    landingUrl.searchParams.set("invite", inviteToken);
+    return Response.redirect(landingUrl.toString(), 302);
   }
 
   if (env.ASSETS) {
