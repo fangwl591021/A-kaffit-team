@@ -85,3 +85,14 @@ test("exclusive share still opens as a closable QR dialog", () => {
   assert.doesNotMatch(shareQrSource, /scrollIntoView|site-home-frame/);
   assert.doesNotMatch(shareQrSource, /60000|60 秒|setTimeout/);
 });
+
+test("exclusive share does not force LIFF login for phone-birthday members", () => {
+  const copyInviteSource = app.slice(
+    app.indexOf("async function copyInvite()"),
+    app.indexOf("async function showWalletQr("),
+  );
+  assert.doesNotMatch(copyInviteSource, /liff\.login|markLiffLoginPending/);
+  assert.match(copyInviteSource, /canUseLinePicker/);
+  assert.match(copyInviteSource, /navigator\.share/);
+  assert.match(copyInviteSource, /navigator\.clipboard\.writeText/);
+});
