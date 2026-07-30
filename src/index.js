@@ -239,6 +239,54 @@ function badRequest(message) {
   return json({ success: false, error: message }, 400);
 }
 
+function escapeWalletHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]);
+}
+
+function walletScanResultHtml(result, status = result?.ok ? 200 : 410) {
+  const accepted = result?.ok === true;
+  const title = accepted ? "會員錢包已讀取" : "QR Code 已失效";
+  const message = accepted
+    ? "已完成會員識別。此畫面不會自動扣除點數。"
+    : "請回到「有點開心」重新產生 QR Code，再掃描一次。";
+  const memberName = escapeWalletHtml(result?.member?.displayName || "A’kaffit 會員");
+  const balance = Number.isFinite(Number(result?.wallet?.balance))
+    ? Number(result.wallet.balance).toLocaleString("zh-TW")
+    : "0";
+  const details = accepted
+    ? `<section class="wallet"><span>會員</span><strong>${memberName}</strong><span>有點開心</span><b>${balance} 點</b></section>`
+    : "";
+  return new Response(`<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <title>${title}｜A’kaffit</title>
+  <style>
+    :root{--primary:#b95121;--deep:#713015;--cream:#fff8f3;--soft:#f9e9df;--ink:#3d2920;--ok:#18794e}
+    *{box-sizing:border-box}html,body{min-height:100%;margin:0}body{display:grid;place-items:center;padding:24px;padding-top:calc(24px + env(safe-area-inset-top));padding-bottom:calc(24px + env(safe-area-inset-bottom));background:var(--cream);color:var(--ink);font-family:system-ui,"Noto Sans TC",sans-serif}
+    main{width:min(420px,100%);padding:28px 24px;border:1px solid #eacdbf;border-radius:24px;background:#fff;text-align:center;box-shadow:0 8px 24px #71301514}.brand{margin:0 0 22px;color:var(--primary);font:800 28px/1 Georgia,serif}.mark{display:grid;width:68px;height:68px;margin:0 auto 18px;place-items:center;border-radius:50%;background:${accepted ? "#e7f5ee" : "var(--soft)"};color:${accepted ? "var(--ok)" : "var(--primary)"};font-size:34px;font-weight:900}h1{margin:0;font-size:24px}p{margin:10px 0 0;color:#80685d;font-size:15px;line-height:1.65}.wallet{display:grid;grid-template-columns:1fr auto;gap:9px 16px;margin-top:22px;padding:18px;border-radius:16px;background:var(--soft);text-align:left}.wallet span{color:#8b6655;font-size:13px}.wallet strong,.wallet b{color:var(--deep);font-size:18px}.wallet strong,.wallet b{text-align:right}.foot{margin-top:20px;font-size:12px;color:#9a8176}
+  </style>
+</head>
+<body><main><div class="brand">A’kaffit</div><div class="mark">${accepted ? "✓" : "!"}</div><h1>${title}</h1><p>${message}</p>${details}<p class="foot">動態 QR Code 僅在產生後 60 秒內有效</p></main></body>
+</html>`, {
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
 function officialTallLiffHtml(env, requestUrl) {
   const liffId = String(env.OFFICIAL_LIFF_ID || "2007221311-nEOHqNxK");
   const url = new URL(requestUrl);
@@ -761,6 +809,16 @@ async function app(request, env, ctx) {
   }
   if (request.method === "GET" && url.pathname === "/v1/youtube/videos") {
     return akaffitYoutubeVideos();
+  }
+  const walletScanPath = url.pathname.match(/^\/w\/([A-Fa-f0-9]{48})$/);
+  if (request.method === "GET" && walletScanPath) {
+    try {
+      const result = await resolveWalletToken(env.DB, walletScanPath[1], "wallet_qr_web");
+      return walletScanResultHtml(result);
+    } catch (error) {
+      console.error("Wallet QR web scan failed", error);
+      return walletScanResultHtml({ ok: false }, 503);
+    }
   }
   const publicCardPath = url.pathname.match(/^\/c\/([A-Za-z0-9_-]+)$/);
   if (request.method === "GET" && publicCardPath) {
