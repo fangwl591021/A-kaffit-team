@@ -623,11 +623,12 @@ function renderTemplateDirectory() {
   if(next)next.disabled=templateDirectoryPage>=totalPages;
   directory.innerHTML=visible.length?visible.map((item,index)=>{
     const saved=!String(item.id||"").startsWith("draft_");
-    const status=item.active!==false?"啟用":"停用";
+    const isActive=item.active!==false;
+    const status=isActive?"啟用":"停用";
     const created=saved?"已儲存":"草稿";
     return `<tr class="${item.id===activeCheckinTemplateId?"active":""}" data-template-id="${esc(item.id)}">
       <td><input value="${esc(item.altText || `簽到活動 ${index+1}`)}" aria-label="標籤名稱" /></td>
-      <td>${status}</td>
+      <td><button type="button" class="templateDirStatusToggle ${isActive?"is-active":"is-inactive"}" data-template-directory-action="toggle" role="switch" aria-checked="${isActive}" aria-label="${esc(item.altText)}目前${status}，點擊改為${isActive?"停用":"啟用"}" title="點擊改為${isActive?"停用":"啟用"}"><span aria-hidden="true"></span><b>${status}</b></button></td>
       <td>${Array.isArray(item.pages)?item.pages.length:0} 頁</td>
       <td><span class="${saved?"":"templateDirDraft"}">${created}</span></td>
       <td><div class="checkinDirectoryActions">
@@ -699,6 +700,32 @@ async function renameCheckinGroup(id, name) {
     templateStatus("標籤名稱已更新。",true);
   }catch(error){templateStatus(error.message,false)}
 }
+async function toggleCheckinGroupStatus(id, button) {
+  const template=checkinTemplates.find(item=>item.id===id);
+  if(!template||String(id).startsWith("draft_"))return showStatus("請先儲存草稿，再設定活動狀態。","error");
+  const nextActive=template.active===false;
+  if(nextActive&&(!template.pages.length||template.pages.some(page=>page.mediaType==="video"?!page.mediaAssetId:!page.imageUrl)))return showStatus("啟用活動前，請先補齊每一頁的圖片或影片。","error");
+  if(!nextActive&&template.pages.some(page=>page.mediaType==="video"&&page.mediaAssetId)&&!confirm("停用活動後，沒有被其他活動使用的影片會永久刪除。確定停用？"))return;
+  button.disabled=true;
+  const original=button.innerHTML;
+  button.textContent="更新中…";
+  try{
+    const data=await api("/v1/admin/checkin-template",{...template,active:nextActive});
+    checkinTemplates=(data.templates||[]).map(normalizeTemplate);
+    const updated=checkinTemplates.find(item=>item.id===id)||normalizeTemplate(data.template||template);
+    if(activeCheckinTemplateId===id)renderCheckinTemplate(updated,collapsedTemplatePages());
+    else renderTemplateDirectory();
+    const message=`「${updated.altText}」已${nextActive?"啟用":"停用"}。`;
+    templateStatus(message,true);
+    showStatus(message);
+    await loadVideoLibrary();
+  }catch(error){
+    button.disabled=false;
+    button.innerHTML=original;
+    templateStatus(error.message,false);
+    showStatus(error.message,"error");
+  }
+}
 async function deleteCheckinGroup(id) {
   const saved=checkinTemplates.filter(item=>!String(item.id||"").startsWith("draft_"));
   if(saved.length<=1)return templateStatus("至少要保留一組簽到活動。",false);
@@ -741,6 +768,7 @@ $("#templateGroupDirectory").addEventListener("click",async event=>{
   const template=checkinTemplates.find(item=>item.id===id);
   if(!template)return;
   if(action==="edit"){openCheckinEditor(template);return;}
+  if(action==="toggle")return toggleCheckinGroupStatus(id,actionButton);
   if(action==="rename")return withButtonFeedback(actionButton,()=>renameCheckinGroup(id,row.querySelector("input")?.value),{busy:"儲存中…",success:"已儲存"});
   if(action==="delete")return withButtonFeedback(actionButton,()=>deleteCheckinGroup(id),{busy:"刪除中…",success:"已刪除"});
 });

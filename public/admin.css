@@ -467,6 +467,14 @@ body.template-page{background:#f5f7fb;overflow:auto}body.template-page .sidebar,
 .checkinDirectoryActions .templateDirRename{border:1px solid #c9d9f3;background:#f6f9ff;color:#295da8}
 .checkinDirectoryActions .templateDirDelete{border:1px solid #f1c3cb;background:#fff7f8;color:#c13f57}
 .checkinDirectoryActions .templateDirDelete:disabled{opacity:.45;cursor:not-allowed}
+.templateDirStatusToggle{height:36px;min-width:92px;display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;border:1px solid transparent;border-radius:999px;padding:0 12px;cursor:pointer;font:inherit;font-weight:850;transition:background .16s ease,border-color .16s ease,color .16s ease}
+.templateDirStatusToggle>span{width:12px;height:12px;flex:0 0 12px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px rgba(255,255,255,.72)}
+.templateDirStatusToggle>b{font:inherit}
+.templateDirStatusToggle.is-active{border-color:#9fd8b4;background:#e9f9ef;color:#087d3d}
+.templateDirStatusToggle.is-inactive{border-color:#d5dee9;background:#f5f7fa;color:#667085}
+.templateDirStatusToggle:hover{filter:brightness(.98)}
+.templateDirStatusToggle:focus-visible{outline:3px solid rgba(6,199,85,.22);outline-offset:2px}
+.templateDirStatusToggle:disabled{opacity:.58;cursor:wait}
 .templateDirDraft{color:#9a6b1c;font-size:12px;font-weight:800}
 @media(max-width:650px){.checkinDirectoryHead{flex-direction:column}.checkinDirectoryHead .importButton{width:100%}}
 

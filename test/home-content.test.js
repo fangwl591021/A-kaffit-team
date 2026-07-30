@@ -49,11 +49,16 @@ test("admin is A-kaffit-owned and exposes the Mira-style check-in module", () =>
     assert.match(page, /簽到贈點活動目錄/);
     assert.match(page, /簽到內容管理/);
     assert.match(page, /新增簽到內容/);
+    assert.match(page, /活動狀態（可切換）/);
     assert.doesNotMatch(page, /data-page="blog"|data-content="blog"|網誌管理/);
     assert.doesNotMatch(page, /mlm\.fangwl591021\.workers\.dev|MLM 主控台|返回 MLM/);
-    assert.match(page, /\/admin\.css\?v=20260730-9/);
-    assert.match(page, /\/admin\.js\?v=20260730-10/);
+    assert.match(page, /\/admin\.css\?v=20260730-10/);
+    assert.match(page, /\/admin\.js\?v=20260730-11/);
   }
+  assert.match(adminJs, /data-template-directory-action="toggle"/);
+  assert.match(adminJs, /role="switch"/);
+  assert.match(adminJs, /toggleCheckinGroupStatus/);
+  assert.match(adminCss, /\.templateDirStatusToggle\.is-active/);
   assert.doesNotMatch(adminJs, /loadBlogPosts|網誌管理/);
   assert.doesNotMatch(adminCss, /\.nav-item\[data-page="carousel"\]|\[data-go="carousel"\]/);
   assert.doesNotMatch(worker, /super-admin-status|mlm_super_admin|url\.pathname==="\/admin\/sso"/);
