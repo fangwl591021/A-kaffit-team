@@ -589,11 +589,9 @@ body.template-drawer-open{overflow:hidden}
 .card-library-delete:disabled{opacity:.55;cursor:wait}
 
 
-/* Temporarily disabled admin modules: retain implementation and data, hide every UI entry. */
+/* Retired course module remains implemented but hidden from the A-kaffit admin UI. */
 .nav-item[data-page="courses"],
-.nav-item[data-page="carousel"],
 [data-go="courses"],
-[data-go="carousel"],
 .metrics article[hidden] {
   display: none !important;
 }
