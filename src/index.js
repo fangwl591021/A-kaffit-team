@@ -2545,7 +2545,17 @@ async function app(request, env, ctx) {
     return Response.redirect(loginUrl.toString(), 302);
   }
 
-  if (env.ASSETS) return env.ASSETS.fetch(request);
+  if (env.ASSETS) {
+    const assetResponse = await env.ASSETS.fetch(request);
+    if (["/admin/", "/admin/index.html", "/admin.html"].includes(url.pathname)) {
+      const headers = new Headers(assetResponse.headers);
+      headers.set("cache-control", "no-store, no-cache, must-revalidate");
+      headers.set("pragma", "no-cache");
+      headers.set("expires", "0");
+      return new Response(assetResponse.body, { status: assetResponse.status, statusText: assetResponse.statusText, headers });
+    }
+    return assetResponse;
+  }
   return json({ success: false, error: "Not Found" }, 404);
 }
 

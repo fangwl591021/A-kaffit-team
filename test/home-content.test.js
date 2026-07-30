@@ -46,11 +46,15 @@ test("admin is A-kaffit-owned and exposes the Mira-style check-in module", () =>
   for (const page of [html, routeHtml]) {
     assert.match(page, /data-page="carousel"(?! hidden)/);
     assert.match(page, /簽到贈點活動目錄/);
+    assert.match(page, /簽到內容管理/);
+    assert.match(page, /新增簽到內容/);
     assert.doesNotMatch(page, /data-page="blog"|data-content="blog"|網誌管理/);
     assert.doesNotMatch(page, /mlm\.fangwl591021\.workers\.dev|MLM 主控台|返回 MLM/);
-    assert.match(page, /\/admin\.js\?v=20260730-9/);
+    assert.match(page, /\/admin\.js\?v=20260730-10/);
   }
   assert.doesNotMatch(adminJs, /loadBlogPosts|網誌管理/);
   assert.doesNotMatch(worker, /super-admin-status|mlm_super_admin|url\.pathname==="\/admin\/sso"/);
   assert.doesNotMatch(wrangler, /"\/admin\/sso"/);
+  assert.match(wrangler, /"\/admin\/\*"/);
+  assert.match(worker, /cache-control", "no-store, no-cache, must-revalidate/);
 });
