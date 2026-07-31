@@ -28,10 +28,11 @@ test("home exposes daily check-in and the directly imported official site", () =
   assert.doesNotMatch(home, />更多功能</);
   assert.doesNotMatch(home, /class="ak-stats"/);
   const features = home.slice(home.indexOf('<div class="ak-feature-grid">'), home.indexOf('</div>', home.indexOf('<div class="ak-feature-grid">')));
-  assert.equal((features.match(/<button(?: type="button")? data-home-(?:action|inline)=/g) || []).length, 5);
-  assert.match(features, /cardCollection[\s\S]*data-home-inline="daily"[\s\S]*smartMatch[\s\S]*calendar[\s\S]*tasks/);
+  assert.equal((features.match(/<button(?: type="button")? data-home-(?:action|inline)=/g) || []).length, 6);
+  assert.match(features, /cardCollection[\s\S]*data-home-action="card"[\s\S]*data-home-inline="daily"[\s\S]*smartMatch[\s\S]*calendar[\s\S]*tasks/);
   assert.doesNotMatch(features, /data-home-action="zodiac"/);
-  assert.doesNotMatch(features, /data-home-action="card"|data-home-action="courses"|data-home-action="wallet"/);
+  assert.match(features, /data-home-action="card"[\s\S]*電子名片/);
+  assert.doesNotMatch(features, /data-home-action="courses"|data-home-action="wallet"/);
   assert.match(features, /個人行程/);
   assert.doesNotMatch(features, /<i>/);
   assert.doesNotMatch(home, /ak-moment-banner/);

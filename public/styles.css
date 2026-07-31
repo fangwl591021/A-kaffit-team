@@ -363,7 +363,7 @@ main#app>*,.content,.business-card,.business-card-detail,.line-source-ecard,.lin
 .portal-primary span:not(.portal-icon){font-size:15px;font-weight:850;letter-spacing:.2px}
 .portal-primary strong{margin-top:3px;font-size:24px;font-weight:900}
 .portal-menu-text{
-  grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-template-columns:repeat(4,minmax(0,1fr));
   gap:8px;
   padding:12px 10px 14px;
   border-bottom:2px solid #dcefe4;
@@ -390,7 +390,7 @@ main#app>*,.content,.business-card,.business-card-detail,.line-source-ecard,.lin
 }
 .portal-menu-text .portal-menu-icon{display:none!important}
 @media(min-width:720px){
-  .portal-menu-text{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .portal-menu-text{grid-template-columns:repeat(7,minmax(0,1fr))}
 }
 @media(max-width:420px){
   .portal-menu-text button{font-size:14px}
