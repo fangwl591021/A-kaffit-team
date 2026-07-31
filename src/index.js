@@ -83,6 +83,7 @@ import {
   serveContactImage,
   serveSharedContactImage,
   updateContact,
+  verifyContactCardData,
 } from "./card-collection.js";
 import {
   processContactAiCardCrm,
@@ -1393,12 +1394,16 @@ async function app(request, env, ctx) {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
     try {
-      const card=await updateContact(env.DB,member.userId,decodeURIComponent(contactCardMatch[1]),(await readJson(request)) || {});
+      const id=decodeURIComponent(contactCardMatch[1]);
+      const payload=(await readJson(request)) || {};
+      const aiProvider=await resolveCardAiProvider(env);
+      const verification=await verifyContactCardData(env.DB,member.userId,id,payload,aiProvider,env.OPENAI_CARD_MODEL);
+      const card=await updateContact(env.DB,member.userId,id,payload);
       if(card.aiInsights?.status === 'queued')scheduleContactCrmInsights(env,ctx,member.userId,card.id);
       if(card.aiCrm?.status === 'queued')scheduleContactAiCardCrm(env,ctx,member.userId,card.id);
-      return json({success:true,card});
+      return json({success:true,card,verification});
     }
-    catch (error) { return badRequest(error.message || "收藏名片更新失敗"); }
+    catch(error){return json({success:false,error:error.message || "收藏名片更新失敗",code:error.code || "",verificationErrors:error.verificationErrors || []},400);}
   }
   if (request.method === "DELETE" && contactCardMatch) {
     const member = await currentMember(request, env);

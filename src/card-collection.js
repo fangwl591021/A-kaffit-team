@@ -6,6 +6,7 @@ import { aiCardCrmFromVersions } from './ai-card-crm.js';
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const FIELD_LIMITS = { displayName:120, englishName:120, companyName:180, jobTitle:120, department:120, mobile:40, companyPhone:40, email:320, websiteUrl:2048, lineUrl:2048, address:300, serviceDescription:1600, note:1000 };
+const CRM_PROFILE_LIMITS = { birthday:10, gender:20, family:800, occupation:800, recreation:800, money:800, health:800, dream:800 };
 const text = (value, max = 1000) => String(value || '').trim().slice(0, max);
 const CARD_VERSIONS = ['standard', 'full', 'square'];
 const VERSION_LAYOUT = { standard:'landscape', full:'portrait', square:'square' };
@@ -58,6 +59,7 @@ function normaliseVersions(value, row = {}) {
   if (source._industry) normalized._industry = source._industry;
   if (source._memberMatch) normalized._memberMatch = source._memberMatch;
   if (source._aiCrm) normalized._aiCrm = source._aiCrm;
+  if (source._crmProfile) normalized._crmProfile = source._crmProfile;
   return normalized;
 }
 export const normalizePhone = (value) => text(value, 60).replace(/[^0-9+]/g, '').replace(/^\+8860?/, '0');
@@ -76,6 +78,19 @@ function cleanCard(input = {}) {
 
 function rawVersions(row = {}) {
   try { return JSON.parse(row.versions_json || '{}') || {}; } catch { return {}; }
+}
+export function normaliseCrmProfile(value = {}) {
+  const profile=Object.fromEntries(Object.entries(CRM_PROFILE_LIMITS).map(([key,limit])=>[key,text(value?.[key],limit)]));
+  if(!['','male','female','other'].includes(profile.gender))profile.gender='';
+  if(profile.birthday){
+    const parsed=new Date(`${profile.birthday}T00:00:00Z`);
+    const today=new Date().toISOString().slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(profile.birthday) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0,10)!==profile.birthday || profile.birthday>today)profile.birthday='';
+  }
+  return profile;
+}
+function crmProfileMeta(row = {}) {
+  return normaliseCrmProfile(rawVersions(row)._crmProfile || {});
 }
 function insightMeta(row = {}) {
   const value = rawVersions(row)._crmInsights || {};
@@ -132,7 +147,7 @@ function rowToCard(row) {
   const versions = parseVersions(row);
   const selectedVersion = CARD_VERSIONS.includes(row.selected_version) ? row.selected_version : 'standard';
   const selected = versions[selectedVersion];
-  return { id:row.id, sourceType:row.source_type, sourcePersonalCardId:row.source_personal_card_id || '', displayName:row.display_name, englishName:row.english_name, companyName:row.company_name, jobTitle:row.job_title, department:row.department, mobile:row.mobile, companyPhone:row.company_phone, email:row.email, websiteUrl:row.website_url, lineUrl:row.line_url, address:row.address, serviceDescription:row.service_description, note:row.note, chatAltText:row.chat_alt_text || DEFAULT_CHAT_ALT_TEXT, selectedVersion, versions, coverUrl:selected.coverUrl, buttons:selected.buttons, hasImage:Boolean(row.front_r2_key), aiInsights:insightMeta(row), aiCrm:aiCardCrmFromVersions(row.versions_json), industry:industryMeta(row), memberMatch:memberMatchFromVersions(row.versions_json), createdAt:row.created_at, updatedAt:row.updated_at };
+  return { id:row.id, sourceType:row.source_type, sourcePersonalCardId:row.source_personal_card_id || '', displayName:row.display_name, englishName:row.english_name, companyName:row.company_name, jobTitle:row.job_title, department:row.department, mobile:row.mobile, companyPhone:row.company_phone, email:row.email, websiteUrl:row.website_url, lineUrl:row.line_url, address:row.address, serviceDescription:row.service_description, note:row.note, crmProfile:crmProfileMeta(row), chatAltText:row.chat_alt_text || DEFAULT_CHAT_ALT_TEXT, selectedVersion, versions, coverUrl:selected.coverUrl, buttons:selected.buttons, hasImage:Boolean(row.front_r2_key), aiInsights:insightMeta(row), aiCrm:aiCardCrmFromVersions(row.versions_json), industry:industryMeta(row), memberMatch:memberMatchFromVersions(row.versions_json), createdAt:row.created_at, updatedAt:row.updated_at };
 }
 
 async function findDuplicate(db, ownerId, card, excludedId = '') {
@@ -182,6 +197,19 @@ const CRM_INSIGHTS_SCHEMA = {
   },
 };
 
+const CONTACT_VERIFICATION_FIELDS = {
+  displayName:'姓名',companyName:'公司',jobTitle:'職稱',department:'部門',mobile:'手機',companyPhone:'公司電話',email:'Email',websiteUrl:'網站',lineUrl:'LINE 連結',address:'地址',
+};
+const CONTACT_DATA_VERIFICATION_SCHEMA = {
+  type:'object',additionalProperties:false,required:['passed','checks','summary'],properties:{
+    passed:{type:'boolean'},
+    checks:{type:'array',items:{type:'object',additionalProperties:false,required:['field','status','reason','evidence'],properties:{
+      field:{type:'string',enum:Object.keys(CONTACT_VERIFICATION_FIELDS)},status:{type:'string',enum:['verified','invalid','unverifiable']},reason:{type:'string'},evidence:{type:'string'},
+    }}},
+    summary:{type:'string'},
+  },
+};
+
 async function callAiResponses(provider, body) {
   if (!provider) throw new Error('名片 AI 辨識服務尚未連線');
   const internal = typeof provider !== 'string';
@@ -208,6 +236,81 @@ async function callAiResponses(provider, body) {
 function outputText(result = {}) {
   return result.output_text || result.output?.flatMap((item)=>item.content || []).find((item)=>item.type === 'output_text')?.text || '';
 }
+export function parseStructuredAiOutput(value, friendlyMessage = 'AI 回傳格式不完整，系統將自動重試') {
+  const raw = String(value || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  const first = raw.indexOf('{');
+  const last = raw.lastIndexOf('}');
+  if (first < 0 || last < first) {
+    const error = new Error(friendlyMessage);
+    error.code = 'ai_incomplete_json';
+    throw error;
+  }
+  try {
+    return JSON.parse(raw.slice(first, last + 1));
+  } catch {
+    const error = new Error(friendlyMessage);
+    error.code = 'ai_invalid_json';
+    throw error;
+  }
+}
+
+async function callAiJsonWithRetry(provider, body, friendlyMessage) {
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const request = attempt ? { ...body, max_output_tokens:Math.max(Number(body.max_output_tokens) || 0, 1400) } : body;
+    const result = await callAiResponses(provider, request);
+    const outputText = result.output_text || result.output?.flatMap((item)=>item.content || []).find((item)=>item.type === 'output_text')?.text;
+    try {
+      return parseStructuredAiOutput(outputText, friendlyMessage);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+function contactVerificationFacts(card = {}) {
+  return Object.fromEntries(Object.keys(CONTACT_VERIFICATION_FIELDS).map((key)=>[key,text(card[key],FIELD_LIMITS[key] || 320)]).filter(([,value])=>value));
+}
+function contactFormatErrors(card = {}) {
+  const errors=[];
+  const phoneValid=(value)=>!value || /^\+?[0-9][0-9\s().-]{6,24}$/.test(value);
+  if(!phoneValid(card.mobile))errors.push({field:'mobile',reason:'手機格式不完整'});
+  if(!phoneValid(card.companyPhone))errors.push({field:'companyPhone',reason:'公司電話格式不完整'});
+  if(card.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(card.email))errors.push({field:'email',reason:'Email 格式不正確'});
+  for(const field of ['websiteUrl','lineUrl']){
+    if(!card[field])continue;
+    try{const url=new URL(card[field]);if(!['http:','https:'].includes(url.protocol) || !url.hostname)throw new Error('invalid')}catch{errors.push({field,reason:'必須是有效的 HTTP 或 HTTPS 網址'})}
+  }
+  if(card.address && card.address.replace(/\s/g,'').length<5)errors.push({field:'address',reason:'地址資訊過短，無法查核'});
+  return errors;
+}
+function throwContactVerificationError(failures = [], fallback = '名片資料二次查核未通過') {
+  const error=new Error(failures.length ? `二次查核未通過：${failures.slice(0,6).map((item)=>`${CONTACT_VERIFICATION_FIELDS[item.field] || item.field}：${text(item.reason,120)}`).join('；')}` : fallback);
+  error.code='contact_verification_failed';error.verificationErrors=failures;throw error;
+}
+export async function verifyContactCardData(db,userId,id,payload,provider,model) {
+  if(!provider)throw new Error('名片二次查核服務尚未連線，資料未儲存');
+  const row=await db.prepare(`SELECT cc.*,cie.ocr_json FROM contact_cards cc LEFT JOIN card_import_events cie ON cie.id=cc.source_event_id WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active'`).bind(id,userId).first();
+  if(!row)throw new Error('找不到收藏名片');
+  const card=cleanCard({...rowToCard(row),...payload});
+  const formatErrors=contactFormatErrors(card);if(formatErrors.length)throwContactVerificationError(formatErrors);
+  const facts=contactVerificationFacts(card);let ocr={};try{ocr=JSON.parse(row.ocr_json || '{}')}catch{}
+  const ocrEvidence=Object.fromEntries(Object.keys(CONTACT_VERIFICATION_FIELDS).map((key)=>[key,text(ocr[key],FIELD_LIMITS[key] || 320)]).filter(([,value])=>value));
+  let result;
+  try{
+    result=await callAiJsonWithRetry(provider,{
+      model:model || 'gpt-5.6-terra',reasoning:{effort:'low'},max_output_tokens:1600,tools:[{type:'web_search'}],
+      input:[{role:'user',content:`你是嚴格的商務名片資料查核員。逐欄查核使用者準備儲存的公開聯絡資料，交叉比對原始名片 OCR 與公開網路資料。\n\n待查核資料：${JSON.stringify(facts)}\n原始名片 OCR 證據：${JSON.stringify(ocrEvidence)}\n\n規則：\n1. 每個待查核欄位都必須回傳一次 checks，不可遺漏或重複。\n2. status 只能是 verified、invalid、unverifiable。完全符合原始名片 OCR 且沒有衝突，或有可靠公開來源支持，才可 verified。\n3. 地址必須是可辨識的完整地址，且與公司、網站、原始名片或可靠公開來源一致；無法確認就 unverifiable。\n4. 電話、Email、網站、LINE 連結須同時檢查格式與其和姓名／公司的一致性。\n5. 不可猜測、補造或因看起來合理就通過。evidence 簡述 OCR 或公開來源依據；無證據時留空。\n6. 只要一欄 invalid、unverifiable、缺少查核或沒有證據，passed=false。只回傳 JSON。`}],
+      text:{format:{type:'json_schema',name:'contact_data_verification',strict:true,schema:CONTACT_DATA_VERIFICATION_SCHEMA}},
+    },'名片資料二次查核回傳不完整，資料未儲存');
+  }catch(error){if(error.code==='contact_verification_failed')throw error;throw new Error(`名片資料二次查核失敗，資料未儲存：${error.message || '請稍後再試'}`)}
+  const checks=new Map((Array.isArray(result.checks)?result.checks:[]).map((item)=>[item.field,item]));
+  const failures=Object.keys(facts).map((field)=>checks.get(field) || {field,status:'unverifiable',reason:'查核結果缺少此欄位',evidence:''}).filter((item)=>item.status!=='verified' || !text(item.evidence,300));
+  if(!result.passed || failures.length)throwContactVerificationError(failures,result.summary || '名片資料二次查核未通過');
+  return {passed:true,checks:[...checks.values()],summary:text(result.summary,300),verifiedAt:new Date().toISOString()};
+}
+
 function businessCardImages(images) {
   return images.map((image)=>({type:'input_image',image_url:`data:${image.type};base64,${bytesToBase64(image.bytes)}`,detail:'high'}));
 }
@@ -277,18 +380,21 @@ export async function expandContactContent(db, userId, id, apiKey, model) {
 
 
 async function generateCrmInsights(apiKey, model, card) {
+  const crmProfile=normaliseCrmProfile(card.crmProfile || {});
   const facts = {
     name:card.displayName,
     mobile:text(card.mobile || card.companyPhone,40).replace(/[^0-9+]/g,''),
-    birthday:'',
+    birthday:crmProfile.birthday,
+    gender:crmProfile.gender,
     company:card.companyName,
     title:card.jobTitle,
     department:card.department,
     serviceDescription:card.serviceDescription,
+    formhd:{family:crmProfile.family,occupation:crmProfile.occupation,recreation:crmProfile.recreation,money:crmProfile.money,health:crmProfile.health,dream:crmProfile.dream},
   };
   const result = await callAiResponses(apiKey, {
       model:model || 'gpt-5.6-terra', reasoning:{effort:'low'}, max_output_tokens:900,
-      input:[{ role:'user', content:`你是一位專業的商務 AI 心理與命理分析專家。請完全依照 LINE- 專案五大標籤規則分析這張掃描名片。\n\n姓名：${facts.name || '未知'}\n手機：${facts.mobile || '未知'}\n生日：${facts.birthday || '未知'}\n公司：${facts.company || '未知'}\n職稱：${facts.title || '未知'}\n部門：${facts.department || '未知'}\n服務說明：${facts.serviceDescription || '未知'}\n\n分析規則：\n1. 姓名字形判斷行動／思考型，發音判斷外向／內斂，結構判斷主導／依附。\n2. 手機數字頻率依 1領導、2協調、3表達、4穩定、5自由、6責任、7分析、8成就、9理想分析；尾數判斷快攻／慢養，奇偶比判斷衝動／保守。\n3. 有生日時融合八字、紫微斗數、生命靈數與東西方星座；未提供生日就以現有欄位分析，不虛構命盤。\n4. 五項必須融合 VAK 感官偏好、分析／數據／直覺決策模式，以及積極／保守與風險偏好。\n5. personality、interests、wealth、health、career 每項以 20 至 40 個繁體中文字，同時描述具體特徵與商務應對建議。\n6. wealth 不宣稱實際收入或資產；health 不診斷疾病；不得捏造個資或經歷。\n7. 同時依公司、職稱、部門與服務說明完成業種分類。primaryIndustry 必須從以下選項選最接近的一項，不可回傳待分類：${INDUSTRY_OPTIONS.join('、')}。secondaryIndustries 最多兩項且不得與主業種重複；資料不足時主業種選「其他行業」。只回傳 JSON。` }],
+      input:[{ role:'user', content:`你是一位專業的商務 AI 心理與命理分析專家。請完全依照 LINE- 專案五大標籤規則分析這張掃描名片。\n\n姓名：${facts.name || '未知'}\n手機：${facts.mobile || '未知'}\n生日：${facts.birthday || '未知'}\n性別：${facts.gender || '未知'}\nFORMHD 暖身線索：${JSON.stringify(facts.formhd)}\n公司：${facts.company || '未知'}\n職稱：${facts.title || '未知'}\n部門：${facts.department || '未知'}\n服務說明：${facts.serviceDescription || '未知'}\n\n分析規則：\n1. 姓名字形判斷行動／思考型，發音判斷外向／內斂，結構判斷主導／依附。\n2. 手機數字頻率依 1領導、2協調、3表達、4穩定、5自由、6責任、7分析、8成就、9理想分析；尾數判斷快攻／慢養，奇偶比判斷衝動／保守。\n3. 有生日時融合八字、紫微斗數、生命靈數與東西方星座；未提供生日就以現有欄位分析，不虛構命盤。\n4. 五項必須融合 VAK 感官偏好、分析／數據／直覺決策模式，以及積極／保守與風險偏好。\n5. personality、interests、wealth、health、career 每項以 20 至 40 個繁體中文字，同時描述具體特徵與商務應對建議。\n6. wealth 不宣稱實際收入或資產；health 不診斷疾病；不得捏造個資或經歷。\n7. 同時依公司、職稱、部門與服務說明完成業種分類。primaryIndustry 必須從以下選項選最接近的一項，不可回傳待分類：${INDUSTRY_OPTIONS.join('、')}。secondaryIndustries 最多兩項且不得與主業種重複；資料不足時主業種選「其他行業」。只回傳 JSON。` }],
       text:{format:{type:'json_schema',name:'crm_five_insights',strict:true,schema:CRM_INSIGHTS_SCHEMA}},
   });
   const outputText=result.output_text || result.output?.flatMap((item)=>item.content || []).find((item)=>item.type==='output_text')?.text;
@@ -668,7 +774,11 @@ export async function updateContact(db,userId,id,payload) {
   const selectedVersion = CARD_VERSIONS.includes(payload.selectedVersion) ? payload.selectedVersion : (existing.selected_version || 'standard');
   const versions = normaliseVersions(payload.versions, existing);
   const existingCard=rowToCard(existing);
-  const insightInputChanged=CRM_INSIGHT_SOURCE_KEYS.some((key)=>text(existingCard[key],FIELD_LIMITS[key] || 1000) !== text(card[key],FIELD_LIMITS[key] || 1000));
+  const existingCrmProfile=crmProfileMeta(existing);
+  const crmProfile=normaliseCrmProfile(payload.crmProfile ?? existingCrmProfile);
+  versions._crmProfile=crmProfile;
+  const insightInputChanged=CRM_INSIGHT_SOURCE_KEYS.some((key)=>text(existingCard[key],FIELD_LIMITS[key] || 1000) !== text(card[key],FIELD_LIMITS[key] || 1000))
+    || JSON.stringify(existingCrmProfile)!==JSON.stringify(crmProfile);
   if(insightInputChanged){
     versions._crmInsights={status:'queued',cards:{},updatedAt:new Date().toISOString(),error:''};
     versions._aiCrm={...(versions._aiCrm || {}),status:'queued',analysisVersion:'',updatedAt:new Date().toISOString(),error:''};
