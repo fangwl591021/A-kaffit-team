@@ -245,7 +245,7 @@ async function openMemberDetail(id) {
     panel.querySelector('.crm-editor')?.insertAdjacentHTML('afterend',renderMemberCrmInsights(data.crmInsights));
     const canAdjustPoints = Boolean(data.access?.canManagePoints);
     const canAssignPermissions = Boolean(data.access?.canManagePermissions) && data.targetAccess?.role !== "owner";
-    const canDeleteMember = Boolean(data.access?.canManagePermissions) && data.targetAccess?.role !== "owner";
+    const canDeleteMember = Boolean(data.access?.systemAccess) && data.targetAccess?.role !== "owner";
     const summary = panel.querySelector(".crm-summary");
     summary?.firstElementChild?.remove();
     summary?.insertAdjacentHTML("beforebegin", `<section class="crm-point-panel"><div><small>可用點數餘額</small><strong>${format(member.points_balance)} <i>點</i></strong></div>${canAdjustPoints ? '<div class="crm-point-actions"><button type="button" data-point-action="grant">＋ 贈點</button><button type="button" data-point-action="deduct">－ 扣點</button></div>' : '<p class="crm-access-note">目前帳號沒有手動調整點數權限。</p>'}</section>`);
@@ -253,7 +253,7 @@ async function openMemberDetail(id) {
     $("#closeMemberDetail").onclick = () => panel.classList.add("hidden");
     $("#cancelMemberEdit").onclick = () => panel.classList.add("hidden");
     if (canDeleteMember) {
-      panel.querySelector(".crm-editor-actions")?.insertAdjacentHTML("afterbegin", '<button type="button" class="crm-delete-member" id="deleteMemberAccount">刪除會員帳號</button>');
+      $("#closeMemberDetail")?.insertAdjacentHTML("beforebegin", '<button type="button" class="crm-delete-member" id="deleteMemberAccount">刪除會員</button>');
       $("#deleteMemberAccount").onclick = async (event) => {
         const label = member.display_name || member.member_number || member.id;
         if (!confirm(`確定刪除「${label}」？\n\n此操作會停用帳號並移除登入識別，但會保留點數與稽核歷史。`)) return;

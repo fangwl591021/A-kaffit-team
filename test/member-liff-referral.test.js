@@ -89,7 +89,7 @@ test("admin CRM returns and renders the LIFF referral URL with mobile-safe copy 
   assert.match(admin, /document\.execCommand\?\.\('copy'\)/);
   assert.match(css, /@media\(max-width:760px\)[\s\S]*\.crm-referral-copy\{grid-template-columns:1fr\}/);
   assert.match(html, /admin\.css\?v=20260731-12/);
-  assert.match(html, /admin\.js\?v=20260731-13/);
+  assert.match(html, /admin\.js\?v=20260731-14/);
 });
 
 test("LIFF entry parsing preserves direct invite and liff.state invite parameters", () => {

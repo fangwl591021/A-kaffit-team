@@ -43,12 +43,16 @@ test("CRM supports protected soft deletion and hides deleted members", () => {
   assert.match(worker, /if \(member\?\.status === "active"\) return member/);
   assert.match(worker, /不可刪除目前登入的管理員帳號/);
   assert.match(worker, /不可刪除最高管理者帳號/);
+  assert.match(worker, /NOT EXISTS \([\s\S]*member_account_aliases maa/);
+  assert.match(worker, /此帳號已合併至主會員，不可刪除登入識別/);
   assert.match(worker, /請先重新指定推薦人/);
   assert.match(worker, /UPDATE platform_users SET status='deleted'/);
   assert.match(worker, /DELETE FROM external_identities/);
   assert.match(worker, /WHERE pu\.status != 'deleted'/);
   assert.match(worker, /admin\.member\.deleted/);
-  assert.match(admin, /id="deleteMemberAccount">刪除會員帳號/);
+  assert.match(admin, /id="deleteMemberAccount">刪除會員/);
+  assert.match(admin, /data\.access\?\.systemAccess/);
+  assert.match(admin, /#closeMemberDetail[\s\S]*beforebegin/);
   assert.match(admin, /此操作會停用帳號並移除登入識別，但會保留點數與稽核歷史/);
   assert.match(admin, /undefined, "DELETE"/);
 });

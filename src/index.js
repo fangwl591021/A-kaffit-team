@@ -2000,6 +2000,10 @@ async function app(request, env, ctx) {
         LEFT JOIN member_profiles ref_mp ON ref_mp.platform_user_id = rr.referrer_user_id
         LEFT JOIN admin_member_permissions amp ON amp.platform_user_id = pu.id
         WHERE pu.status != 'deleted'
+          AND NOT EXISTS (
+            SELECT 1 FROM member_account_aliases maa
+            WHERE maa.alias_user_id = pu.id
+          )
         ORDER BY pu.created_at DESC
         LIMIT 500
       `).all();
@@ -2034,11 +2038,17 @@ async function app(request, env, ctx) {
       return json({ success: true, member, referralUrl, crmInsights, access: admin.adminAccess, targetAccess, ledger: ledger.results || [], courses: courses.results || [], checkins: checkins.results || [], referrals: referrals.results || [] });
     }
     if (request.method === "DELETE" && memberDetailMatch) {
-      if (!admin.adminAccess.canManagePermissions) return json({ success:false, error:"只有最高管理者可刪除會員帳號" }, 403);
+      if (!admin.adminAccess.systemAccess) return json({ success:false, error:"只有系統管理員可刪除會員帳號" }, 403);
       const memberId = memberDetailMatch[1];
       if (memberId === admin.userId) return badRequest("不可刪除目前登入的管理員帳號");
-      const target = await env.DB.prepare("SELECT id,status FROM platform_users WHERE id=?").bind(memberId).first();
+      const target = await env.DB.prepare(`
+        SELECT pu.id, pu.status, maa.canonical_user_id
+        FROM platform_users pu
+        LEFT JOIN member_account_aliases maa ON maa.alias_user_id = pu.id
+        WHERE pu.id = ?
+      `).bind(memberId).first();
       if (!target || target.status === "deleted") return json({ success:false, error:"Member not found" }, 404);
+      if (target.canonical_user_id) return json({ success:false, error:"此帳號已合併至主會員，不可刪除登入識別" }, 409);
       const targetAccess = await getAdminAccess(env.DB, memberId, env.ADMIN_LINE_SUBJECTS);
       if (targetAccess.role === "owner") return badRequest("不可刪除最高管理者帳號");
       const activeReferrals = await env.DB.prepare("SELECT COUNT(*) AS count FROM referral_relationships WHERE referrer_user_id=? AND status='active'").bind(memberId).first();
