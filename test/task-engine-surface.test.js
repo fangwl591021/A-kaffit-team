@@ -9,7 +9,7 @@ const migration = readFileSync(new URL("../migrations/0042_ai_task_engine.sql", 
 const telegramMigration = readFileSync(new URL("../migrations/0043_member_task_telegram_token.sql", import.meta.url), "utf8");
 
 test("Task Engine is reachable from home and supports the complete feedback loop", () => {
-  assert.match(app, /data-home-action="tasks"><span>AI 任務/);
+  assert.match(app, /data-home-action="tasks">\$\{homeToolIcons\.tasks\}<span>AI 任務/);
   assert.match(app, /✓ 已完成/);
   assert.match(app, /⏰ 延期/);
   assert.match(app, /× 取消/);
