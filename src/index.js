@@ -1397,11 +1397,12 @@ async function app(request, env, ctx) {
     try {
       const id=decodeURIComponent(contactCardMatch[1]);
       const payload=(await readJson(request)) || {};
-      const aiProvider=await resolveCardAiProvider(env);
-      const verification=await verifyContactCardData(env.DB,member.userId,id,payload,aiProvider,env.OPENAI_CARD_MODEL);
+      const verification=await verifyContactCardData(env.DB,member.userId,id,payload,null,env.OPENAI_CARD_MODEL);
       const card=await updateContact(env.DB,member.userId,id,payload);
-      if(card.aiInsights?.status === 'queued')scheduleContactCrmInsights(env,ctx,member.userId,card.id);
-      if(card.aiCrm?.status === 'queued')scheduleContactAiCardCrm(env,ctx,member.userId,card.id);
+      const verificationQueued=await queueContactCardReverification(env.DB,member.userId,id);
+      if(verificationQueued)scheduleContactCardReverification(env,ctx,member.userId,id);
+      if(card.aiInsights?.status === 'queued' && !verificationQueued)scheduleContactCrmInsights(env,ctx,member.userId,card.id);
+      if(card.aiCrm?.status === 'queued' && !verificationQueued)scheduleContactAiCardCrm(env,ctx,member.userId,card.id);
       return json({success:true,card,verification});
     }
     catch(error){return json({success:false,error:error.message || "收藏名片更新失敗",code:error.code || "",verificationErrors:error.verificationErrors || []},400);}

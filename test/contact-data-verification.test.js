@@ -15,26 +15,42 @@ function providerFor(result,onRequest=()=>{}){
 
 test('contact data verification checks every filled public field before saving', async()=>{
   let request;
-  const result=await verifyContactCardData(dbFor(),'user_1','contact_1',{},providerFor({passed:true,checks:verifiedChecks,summary:'全部通過'},(value)=>{request=value}),'gpt-test');
+  const result=await verifyContactCardData(dbFor(),'user_1','contact_1',{companyName:'人工修正公司'},providerFor({passed:true,checks:verifiedChecks,summary:'全部通過'},(value)=>{request=value}),'gpt-test');
   assert.equal(result.passed,true);
   assert.equal(result.checks.length,6);
   assert.deepEqual(request.tools,[{type:'web_search'}]);
   assert.match(request.input[0].content,/台北市信義區市府路1號/);
+  assert.match(request.input[0].content,/人工修正資料是目前主資料/);
+  assert.match(request.input[0].content,/人工修正公司/);
+  assert.match(request.input[0].content,/範例公司/);
   assert.doesNotMatch(request.input[0].content,/家庭 Family|生日/);
 });
 
-test('contact data verification blocks an unverifiable address', async()=>{
+test('AI verification is advisory when public evidence is unavailable', async()=>{
   const checks=verifiedChecks.map((item)=>item.field==='address'?{...item,status:'unverifiable',reason:'找不到地址依據',evidence:''}:item);
-  await assert.rejects(()=>verifyContactCardData(dbFor(),'user_1','contact_1',{},providerFor({passed:false,checks,summary:'地址未通過'}),'gpt-test'),/二次查核未通過：地址：找不到地址依據/);
+  const result=await verifyContactCardData(dbFor(),'user_1','contact_1',{companyName:'人工修正公司'},providerFor({passed:false,checks,summary:'地址未通過'}),'gpt-test');
+  assert.equal(result.passed,false);
+  assert.equal(result.advisory,true);
+  assert.equal(result.verificationErrors[0].field,'address');
 });
 
-test('format failure stops before AI and route verifies before database update', async()=>{
+test('manual corrections can save while AI verification runs in the background', async()=>{
+  const result=await verifyContactCardData(dbFor(),'user_1','contact_1',{companyName:'人工修正公司'},null,'gpt-test');
+  assert.equal(result.passed,false);
+  assert.equal(result.advisory,true);
+  assert.match(result.summary,/人工修正仍可儲存/);
+});
+
+test('format failure still blocks before save and valid edits queue background AI', async()=>{
   let called=false;
   await assert.rejects(()=>verifyContactCardData(dbFor(),'user_1','contact_1',{email:'not-an-email'},providerFor({},()=>{called=true}),'gpt-test'),/Email 格式不正確/);
   assert.equal(called,false);
   const source=readFileSync(new URL('../src/index.js',import.meta.url),'utf8');
-  assert.ok(source.indexOf('verification=await verifyContactCardData')<source.indexOf('card=await updateContact'));
+  const patchSource=source.slice(source.indexOf('if (request.method === "PATCH" && contactCardMatch)'));
+  assert.ok(patchSource.indexOf('verification=await verifyContactCardData')<patchSource.indexOf('card=await updateContact'));
+  assert.match(patchSource,/verifyContactCardData\(env\.DB,member\.userId,id,payload,null/);
+  assert.ok(patchSource.indexOf('card=await updateContact')<patchSource.indexOf('verificationQueued=await queueContactCardReverification'));
   const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  assert.match(app,/查核並儲存/);
-  assert.match(app,/二次查核中/);
+  assert.match(app,/儲存修改/);
+  assert.match(app,/AI 將在背景補強/);
 });

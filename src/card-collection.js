@@ -290,25 +290,25 @@ function throwContactVerificationError(failures = [], fallback = '名片資料�
   error.code='contact_verification_failed';error.verificationErrors=failures;throw error;
 }
 export async function verifyContactCardData(db,userId,id,payload,provider,model) {
-  if(!provider)throw new Error('名片二次查核服務尚未連線，資料未儲存');
   const row=await db.prepare(`SELECT cc.*,cie.ocr_json FROM contact_cards cc LEFT JOIN card_import_events cie ON cie.id=cc.source_event_id WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active'`).bind(id,userId).first();
   if(!row)throw new Error('找不到收藏名片');
   const card=cleanCard({...rowToCard(row),...payload});
   const formatErrors=contactFormatErrors(card);if(formatErrors.length)throwContactVerificationError(formatErrors);
+  if(!provider)return {passed:false,advisory:true,checks:[],summary:'AI 查核服務暫時無法使用；人工修正仍可儲存，系統稍後再補強。',verificationErrors:[],verifiedAt:new Date().toISOString()};
   const facts=contactVerificationFacts(card);let ocr={};try{ocr=JSON.parse(row.ocr_json || '{}')}catch{}
   const ocrEvidence=Object.fromEntries(Object.keys(CONTACT_VERIFICATION_FIELDS).map((key)=>[key,text(ocr[key],FIELD_LIMITS[key] || 320)]).filter(([,value])=>value));
   let result;
   try{
     result=await callAiJsonWithRetry(provider,{
       model:model || 'gpt-5.6-terra',reasoning:{effort:'low'},max_output_tokens:1600,tools:[{type:'web_search'}],
-      input:[{role:'user',content:`你是嚴格的商務名片資料查核員。逐欄查核使用者準備儲存的公開聯絡資料，交叉比對原始名片 OCR 與公開網路資料。\n\n待查核資料：${JSON.stringify(facts)}\n原始名片 OCR 證據：${JSON.stringify(ocrEvidence)}\n\n規則：\n1. 每個待查核欄位都必須回傳一次 checks，不可遺漏或重複。\n2. status 只能是 verified、invalid、unverifiable。完全符合原始名片 OCR 且沒有衝突，或有可靠公開來源支持，才可 verified。\n3. 地址必須是可辨識的完整地址，且與公司、網站、原始名片或可靠公開來源一致；無法確認就 unverifiable。\n4. 電話、Email、網站、LINE 連結須同時檢查格式與其和姓名／公司的一致性。\n5. 不可猜測、補造或因看起來合理就通過。evidence 簡述 OCR 或公開來源依據；無證據時留空。\n6. 只要一欄 invalid、unverifiable、缺少查核或沒有證據，passed=false。只回傳 JSON。`}],
+      input:[{role:'user',content:`你是商務名片資料查核助手。使用者準備儲存的人工修正資料是目前主資料，原始名片 OCR 只作為歷史參考，不得因兩者不同而判定人工修正錯誤。逐欄查核公開聯絡資料並搜尋公開網路資料。\n\n待查核資料：${JSON.stringify(facts)}\n原始名片 OCR 證據：${JSON.stringify(ocrEvidence)}\n\n規則：\n1. 每個待查核欄位都必須回傳一次 checks，不可遺漏或重複。\n2. status 只能是 verified、invalid、unverifiable。人工修正與 OCR 不同不構成 invalid；有可靠公開來源支持才可 verified，暫時找不到公開來源則為 unverifiable。\n3. 地址必須是可辨識的完整地址，且與公司、網站、原始名片或可靠公開來源一致；無法確認就 unverifiable。\n4. 電話、Email、網站、LINE 連結須同時檢查格式與其和姓名／公司的一致性。\n5. 不可猜測、補造或因看起來合理就通過。evidence 簡述 OCR 或公開來源依據；無證據時留空。\n6. 只要一欄 invalid、unverifiable、缺少查核或沒有證據，passed=false。只回傳 JSON。`}],
       text:{format:{type:'json_schema',name:'contact_data_verification',strict:true,schema:CONTACT_DATA_VERIFICATION_SCHEMA}},
     },'名片資料二次查核回傳不完整，資料未儲存');
-  }catch(error){if(error.code==='contact_verification_failed')throw error;throw new Error(`名片資料二次查核失敗，資料未儲存：${error.message || '請稍後再試'}`)}
+  }catch(error){return {passed:false,advisory:true,checks:[],summary:'AI 查核暫時未完成；人工修正仍可儲存，系統稍後再補強。',verificationErrors:[],verifiedAt:new Date().toISOString()}}
   const checks=new Map((Array.isArray(result.checks)?result.checks:[]).map((item)=>[item.field,item]));
   const failures=Object.keys(facts).map((field)=>checks.get(field) || {field,status:'unverifiable',reason:'查核結果缺少此欄位',evidence:''}).filter((item)=>item.status!=='verified' || !text(item.evidence,300));
-  if(!result.passed || failures.length)throwContactVerificationError(failures,result.summary || '名片資料二次查核未通過');
-  return {passed:true,checks:[...checks.values()],summary:text(result.summary,300),verifiedAt:new Date().toISOString()};
+  if(!result.passed || failures.length)return {passed:false,advisory:true,checks:[...checks.values()],summary:text(result.summary || 'AI 查核尚有待確認項目；人工修正已作為主資料。',300),verificationErrors:failures,verifiedAt:new Date().toISOString()};
+  return {passed:true,advisory:false,checks:[...checks.values()],summary:text(result.summary,300),verificationErrors:[],verifiedAt:new Date().toISOString()};
 }
 
 function businessCardImages(images) {
