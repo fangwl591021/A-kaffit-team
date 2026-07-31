@@ -980,6 +980,73 @@ async function app(request, env, ctx) {
     }
   }
 
+  if (request.method === "POST" && url.pathname === "/v1/cards/me/imports") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
+    try {
+      const imported = await createImport(env.DB, env.MEDIA, member.userId, await request.formData(), { purpose:"personal" });
+      return json({ success:true, import:imported }, 201);
+    } catch (error) {
+      return badRequest(error.message || "個人名片圖片上傳失敗");
+    }
+  }
+
+  const confirmPersonalCardImport = url.pathname.match(/^\/v1\/cards\/me\/imports\/([^/]+)\/confirm$/);
+  if (request.method === "POST" && confirmPersonalCardImport) {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
+    let mediaId = "";
+    try {
+      const eventId = decodeURIComponent(confirmPersonalCardImport[1]);
+      const event = await env.DB.prepare("SELECT * FROM card_import_events WHERE id=? AND scanner_user_id=?")
+        .bind(eventId, member.userId).first();
+      if (!event || event.status !== "review_ready") throw new Error("名片辨識結果已失效，請重新掃描");
+      const front = event.front_r2_key ? await env.MEDIA.get(event.front_r2_key) : null;
+      if (!front) throw new Error("找不到名片正面圖片，請重新上傳");
+      const input = (await readJson(request)) || {};
+      const imported = input.card && typeof input.card === "object" ? input.card : input;
+      const existing = await getMyCard(env.DB, member.userId);
+      mediaId = newId("card_media");
+      const imageBytes = await front.arrayBuffer();
+      const contentType = front.httpMetadata?.contentType || event.front_content_type || "image/webp";
+      await env.DB.prepare("INSERT INTO personal_card_media (id, platform_user_id, content_type, bytes) VALUES (?, ?, ?, ?)")
+        .bind(mediaId, member.userId, contentType, imageBytes).run();
+      const coverUrl = url.origin + "/v1/cards/media/" + mediaId;
+      const versions = structuredClone(existing?.versions || {});
+      versions.standard = {
+        ...(versions.standard || {}),
+        coverUrl,
+        title: String(imported.displayName || existing?.displayName || member.displayName || "").trim(),
+        description: String(imported.serviceDescription || existing?.serviceDescription || "").trim(),
+      };
+      const card = await saveMyCard(env.DB, member.userId, {
+        ...imported,
+        coverUrl,
+        selectedVersion: "standard",
+        versions,
+        status: "published",
+      }, member);
+      const insightQueue = queueMemberCrmInsight(env.DB, member.userId)
+        .then(() => scheduleMemberCrmInsights(env, ctx, member.userId))
+        .catch((error) => console.error("Personal card CRM insight queue failed", error));
+      if (ctx?.waitUntil) ctx.waitUntil(insightQueue);
+      const cleanup = Promise.allSettled([
+        ...[event.front_r2_key, event.back_r2_key].filter(Boolean).map((key) => env.MEDIA.delete(key)),
+        env.DB.prepare("UPDATE card_import_events SET status='personal_created',front_r2_key='',back_r2_key='',updated_at=CURRENT_TIMESTAMP WHERE id=? AND scanner_user_id=?")
+          .bind(eventId, member.userId).run(),
+        env.DB.prepare("UPDATE card_import_fingerprints SET status='completed',updated_at=CURRENT_TIMESTAMP WHERE event_id=? AND user_id=?")
+          .bind(eventId, member.userId).run(),
+      ]).then((results) => {
+        results.filter((result) => result.status === "rejected").forEach((result) => console.error("Personal card import cleanup failed", result.reason));
+      });
+      if (ctx?.waitUntil) ctx.waitUntil(cleanup); else cleanup.catch(() => null);
+      return json({ success: true, card }, 201);
+    } catch (error) {
+      if (mediaId) await env.DB.prepare("DELETE FROM personal_card_media WHERE id=? AND platform_user_id=?").bind(mediaId, member.userId).run().catch(() => null);
+      return badRequest(error.message || "建立個人名片失敗");
+    }
+  }
+
   if (url.pathname === "/v1/tasks" && request.method === "GET") {
     const member = await currentMember(request, env);
     if (!member) return json({ success:false, error:"Unauthorized" }, 401);

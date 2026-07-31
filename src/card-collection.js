@@ -647,12 +647,13 @@ async function ensureCardImportFingerprintTable(db) {
     )
   `).run();
 }
-async function cardImportFingerprint(buffers) {
-  const total=buffers.reduce((sum,buffer)=>sum+4+buffer.byteLength,0);
+async function cardImportFingerprint(buffers, namespace='') {
+  const parts=namespace ? [new TextEncoder().encode(namespace).buffer,...buffers] : buffers;
+  const total=parts.reduce((sum,buffer)=>sum+4+buffer.byteLength,0);
   const joined=new Uint8Array(total);
   const view=new DataView(joined.buffer);
   let offset=0;
-  for(const buffer of buffers){
+  for(const buffer of parts){
     view.setUint32(offset,buffer.byteLength);offset+=4;
     joined.set(new Uint8Array(buffer),offset);offset+=buffer.byteLength;
   }
@@ -664,7 +665,7 @@ async function updateCardImportFingerprint(db,eventId,status) {
   await db.prepare('UPDATE card_import_fingerprints SET status=?,updated_at=CURRENT_TIMESTAMP WHERE event_id=?').bind(status,eventId).run();
 }
 
-export async function createImport(db, bucket, userId, form) {
+export async function createImport(db, bucket, userId, form, options = {}) {
   const files = ['front','back'].map((key)=>form.get(key)).filter((file)=>file instanceof File && file.size);
   if (!files.length || files.length > 2) throw new Error('請選擇名片正面，最多可加一張背面');
   for (const file of files) {
@@ -674,7 +675,8 @@ export async function createImport(db, bucket, userId, form) {
   const count = await db.prepare("SELECT COUNT(*) count FROM card_import_events WHERE scanner_user_id = ? AND created_at >= datetime('now','-1 day')").bind(userId).first();
   if (Number(count?.count || 0) >= 20) throw new Error('今日名片辨識已達 20 次，請明日再試');
   const buffers=await Promise.all(files.map((file)=>file.arrayBuffer()));
-  const fingerprint=await cardImportFingerprint(buffers);
+  const purpose=options.purpose === 'personal' ? 'personal' : 'collection';
+  const fingerprint=await cardImportFingerprint(buffers,purpose === 'personal' ? 'personal-card' : '');
   await ensureCardImportFingerprintTable(db);
   const previous=await db.prepare('SELECT status,created_at FROM card_import_fingerprints WHERE user_id=? AND fingerprint=? LIMIT 1').bind(userId,fingerprint).first();
   if(previous && previous.status!=='failed' && (previous.status!=='pending' || Date.parse(previous.created_at)>Date.now()-2*60*60*1000)){
@@ -682,7 +684,7 @@ export async function createImport(db, bucket, userId, form) {
   }
   if(previous)await db.prepare('DELETE FROM card_import_fingerprints WHERE user_id=? AND fingerprint=?').bind(userId,fingerprint).run();
   const id = newId('card_import');
-  const keys = files.map((_, index)=>`card-collections/${userId}/${id}/${index ? 'back' : 'front'}.webp`);
+  const keys = files.map((_, index)=>`${purpose === 'personal' ? 'personal-card-imports' : 'card-collections'}/${userId}/${id}/${index ? 'back' : 'front'}.webp`);
   await db.prepare("INSERT INTO card_import_fingerprints (user_id,fingerprint,event_id,status) VALUES (?,?,?,'pending')").bind(userId,fingerprint,id).run();
   try {
     await Promise.all(files.map((file,index)=>bucket.put(keys[index],buffers[index],{httpMetadata:{contentType:file.type}})));
