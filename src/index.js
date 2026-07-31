@@ -843,7 +843,8 @@ async function app(request, env, ctx) {
       return json({ success: false, error: "Service is not configured" }, 503);
     try {
       const body = (await readJson(request)) || {};
-      const result = await resolvePhoneBirthdayMember(env.DB, body.phone, body.birthday, body.inviteToken);
+      const intent = ['login','register'].includes(body.intent) ? body.intent : 'auto';
+      const result = await resolvePhoneBirthdayMember(env.DB, body.phone, body.birthday, body.inviteToken, intent);
       if (result.created) {
         await awardPoints(env.DB, {
           userId: result.member.userId,

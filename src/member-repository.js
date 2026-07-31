@@ -178,7 +178,7 @@ export function normalizeBirthday(rawBirthday) {
   return birthday;
 }
 
-export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, inviteToken = '') {
+export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, inviteToken = '', intent = 'auto') {
   const phone = String(rawPhone || '').replace(/[^\d+]/g, '').slice(0, 20);
   const birthday = normalizeBirthday(rawBirthday);
   if (!/^(?:\+886|0)9\d{8}$/.test(phone)) throw new Error('請輸入正確的台灣手機號碼');
@@ -202,6 +202,7 @@ export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, invi
     `).bind(normalizedPhone, birthday).first();
   }
   if (existing?.user_id) {
+    if (intent === 'register') throw new Error('此手機與生日已註冊，請切換「會員登入」');
     await db.prepare(`INSERT INTO external_identities
       (id, platform_user_id, provider, provider_subject, verification_status, last_verified_at)
       VALUES (?, ?, 'phone_birthday', ?, 'verified', CURRENT_TIMESTAMP)
@@ -230,6 +231,7 @@ export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, invi
   if (phoneOwner) {
     throw new Error('此手機已建立會員，但生日驗證不符。請確認生日，或聯絡管理員協助找回帳號。');
   }
+  if (intent === 'login') throw new Error('查無會員資料，請先切換「新會員註冊」');
   const userId = newId('usr');
   const memberNumber = await reserveMemberNumber(db);
   const displayName = `會員${normalizedPhone.slice(-4)}`;
