@@ -16,8 +16,14 @@ test("smart matching only exposes card and five-tag matching", () => {
 test("number science UI is removed and retired APIs return 410", () => {
   const app = source("public/app.js");
   const worker = source("src/index.js");
+  const admin = source("public/admin.js");
+  const migration = source("migrations/0042_remove_number_science_point_rules.sql");
   assert.doesNotMatch(app, /numberScienceProducts|numberSciencePanel|\/v1\/number-science\/reports/);
   assert.match(worker, /url\.pathname === "\/v1\/number-science\/reports"[\s\S]*?數字科學內容已下架" \}, 410/);
+  assert.match(worker, /event_type NOT LIKE 'number_science_%'/);
+  assert.doesNotMatch(worker, /pointrule_number_science_/);
+  assert.doesNotMatch(admin, /number_science_/);
+  assert.match(migration, /DELETE FROM point_rules[\s\S]*event_type LIKE 'number_science_%'/);
   assert.match(worker, /url\.pathname === "\/v1\/smart-product\/ask"[\s\S]*?康立商品內容已下架" \}, 410/);
 });
 

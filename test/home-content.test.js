@@ -53,7 +53,7 @@ test("admin is A-kaffit-owned and exposes the Mira-style check-in module", () =>
     assert.doesNotMatch(page, /data-page="blog"|data-content="blog"|網誌管理/);
     assert.doesNotMatch(page, /mlm\.fangwl591021\.workers\.dev|MLM 主控台|返回 MLM/);
     assert.match(page, /\/admin\.css\?v=20260731-12/);
-    assert.match(page, /\/admin\.js\?v=20260731-14/);
+    assert.match(page, /\/admin\.js\?v=20260731-15/);
   }
   assert.match(adminJs, /data-template-directory-action="toggle"/);
   assert.match(adminJs, /role="switch"/);

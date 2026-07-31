@@ -21,11 +21,6 @@ import {
 } from "./member-repository.js";
 import { adjustPoints, awardPoints, getWallet } from "./points.js";
 import {
-  LEGACY_NUMBER_SCIENCE_OTHER_EVENT,
-  NUMBER_SCIENCE_PRICE_RULES,
-  numberSciencePointCost,
-} from "./number-science-pricing.js";
-import {
   cancelCalendarSession,
   checkInToSession,
   smartCheckInToActiveSession,
@@ -185,11 +180,6 @@ const POINT_RULE_EVENTS = new Set([
   'attendance_verified',
   'referral_attendance_reward',
   'task_completed',
-  'number_science_full_report',
-  'number_science_daily_report',
-  'number_science_matching_report',
-  'number_science_workplace_report',
-  'number_science_love_report',
   'card_collection_reward',
 ]);
 
@@ -200,16 +190,7 @@ const CANCELLED_POINT_RULE_EVENTS = [
 ];
 
 async function ensureServicePointRules(db) {
-  const numberScienceRules = NUMBER_SCIENCE_PRICE_RULES.map((rule) => {
-    const inheritedPoints = rule.requestType === 1
-      ? String(rule.defaultPoints)
-      : `COALESCE((SELECT points FROM point_rules WHERE program_id='program_main' AND event_type='${LEGACY_NUMBER_SCIENCE_OTHER_EVENT}' ORDER BY updated_at DESC LIMIT 1),${rule.defaultPoints})`;
-    return db.prepare(`INSERT OR IGNORE INTO point_rules
-      (id,program_id,event_type,points,daily_limit,award_frequency,status,rule_version)
-      VALUES ('${rule.ruleId}','program_main','${rule.eventType}',${inheritedPoints},NULL,'per_completion','active','v1')`);
-  });
   await db.batch([
-    ...numberScienceRules,
     db.prepare(`INSERT OR IGNORE INTO point_rules
       (id,program_id,event_type,points,daily_limit,award_frequency,status,rule_version)
       VALUES ('pointrule_card_collection','program_main','card_collection_reward',10,NULL,'per_completion','active','v1')`),
@@ -217,30 +198,10 @@ async function ensureServicePointRules(db) {
       (id,program_id,event_type,points,daily_limit,award_frequency,status,rule_version)
       VALUES ('pointrule_default_daily_ad_checkin','program_main','daily_ad_checkin',1,NULL,'daily','active','v1')`),
     db.prepare(`UPDATE point_rules SET status='archived',updated_at=CURRENT_TIMESTAMP
-      WHERE program_id='program_main' AND event_type='${LEGACY_NUMBER_SCIENCE_OTHER_EVENT}' AND status!='archived'`),
-    db.prepare(`UPDATE point_rules SET status='archived',updated_at=CURRENT_TIMESTAMP
       WHERE program_id='program_main' AND event_type IN ('member_joined','referral_attendance_reward','registration_completed')
         AND status!='archived'`),
   ]);
 }
-
-async function servicePointPricing(db) {
-  await ensureServicePointRules(db);
-  const eventTypes = NUMBER_SCIENCE_PRICE_RULES.map((rule) => `'${rule.eventType}'`).join(",");
-  const rows=await db.prepare(`SELECT event_type,points,status FROM point_rules
-    WHERE program_id='program_main' AND event_type IN (${eventTypes},'card_collection_reward')
-    ORDER BY updated_at DESC`).all();
-  const active=new Map();
-  for(const row of rows.results || [])if(!active.has(row.event_type)&&row.status==='active')active.set(row.event_type,Number(row.points));
-  const pricing = {};
-  for (const rule of NUMBER_SCIENCE_PRICE_RULES) {
-    const points = active.get(rule.eventType);
-    pricing[rule.pricingKey] = Number.isInteger(points) ? points : rule.defaultPoints;
-  }
-  pricing.cardCollectionReward = Number.isInteger(active.get('card_collection_reward')) ? active.get('card_collection_reward') : 0;
-  return pricing;
-}
-
 function badRequest(message) {
   return json({ success: false, error: message }, 400);
 }
@@ -452,129 +413,6 @@ async function currentMember(request, env) {
     }
   }
   return null;
-}
-
-async function currentMemberLineSubject(db, userId) {
-  const row = await db.prepare(`
-    SELECT provider_subject
-    FROM external_identities
-    WHERE platform_user_id = ?
-      AND provider = 'line_login'
-      AND verification_status = 'verified'
-    LIMIT 1
-  `).bind(userId).first();
-  return String(row?.provider_subject || '').trim();
-}
-
-async function proxyNumberScienceRequest(env, member, body = {}) {
-  if (!env.MLM_WORKER || typeof env.MLM_WORKER.fetch !== 'function') {
-    return json({ success: false, error: '数字科学服務尚未連線' }, 503);
-  }
-  const lineUserId = await currentMemberLineSubject(env.DB, member.userId);
-  if (!lineUserId) return json({ success: false, error: '找不到 LINE 會員身份，請重新登入' }, 401);
-
-  const action = String(body.action || 'generate').trim().toLowerCase();
-  const pricing = await servicePointPricing(env.DB);
-  const payload = { action, lineUserId };
-  if (action === 'generate') {
-    if (!member.profileCompletedAt || !member.birthday) {
-      return json({ success: false, error: '請先完成會員註冊與生日資料' }, 400);
-    }
-    const memberGender = member.gender === 'male' ? 0 : member.gender === 'female' ? 1 : null;
-    const requestedGender = body.selfGender === 0 || body.selfGender === '0' ? 0
-      : body.selfGender === 1 || body.selfGender === '1' ? 1 : memberGender;
-    if (requestedGender === null) {
-      return json({ success: false, error: '請選擇本次報告使用的性別' }, 400);
-    }
-    payload.requestType = Number(body.requestType);
-    payload.pointCost = numberSciencePointCost(pricing, payload.requestType);
-    if (payload.pointCost === null) return json({ success:false, error:'不支援的数字科学報告類型' }, 400);
-    payload.consent = body.consent === true;
-    payload.self = {
-      name: member.displayName || '',
-      email: member.email || '',
-      mobile: member.phone || '',
-      birthDate: member.birthday,
-      gender: requestedGender,
-    };
-    if (body.person && typeof body.person === 'object') {
-      payload.person = {
-        name: String(body.person.name || '').trim(),
-        birthDate: String(body.person.birthDate || '').trim(),
-        gender: body.person.gender,
-      };
-    }
-  } else if (action === 'get') {
-    payload.id = String(body.id || '').trim();
-  }
-
-  try {
-    const response = await env.MLM_WORKER.fetch('https://mlm.internal/api/internal/number-science/reports', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.status !== 'success') {
-      return json({ success: false, error: String(result.message || result.error || '数字科学服務暫時無法使用') }, response.status || 502);
-    }
-    return json({ success: true, pricing, ...result });
-  } catch (error) {
-    console.error('Number science MLM proxy failed', error);
-    return json({ success: false, error: '数字科学服務暫時無法連線' }, 502);
-  }
-}
-
-function matchingContextText(value, max = 1200) {
-  return String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
-}
-
-async function loadNumberScienceMatchingContext(env, member) {
-  if (!env.MLM_WORKER || typeof env.MLM_WORKER.fetch !== 'function') return { text: '', labels: [] };
-  const lineUserId = await currentMemberLineSubject(env.DB, member.userId);
-  if (!lineUserId) return { text: '', labels: [] };
-  const call = async (payload) => {
-    const response = await env.MLM_WORKER.fetch('https://mlm.internal/api/internal/number-science/reports', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ ...payload, lineUserId }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.status !== 'success') throw new Error(result.message || '数字科学資料讀取失敗');
-    return result;
-  };
-
-  try {
-    const listing = await call({ action: 'list' });
-    const reports = Array.isArray(listing.reports) ? listing.reports : [];
-    // 智能配對只使用尋求者自己的完整與流日背景。配對、職場、愛情報告
-    // 含有特定第三人資料，不應拿來評估其他收藏名片。
-    const selected = [1, 2].flatMap((requestType) => {
-      const item = reports.find((report) => Number(report.requestType) === requestType);
-      return item ? [item] : [];
-    });
-    if (!selected.length) return { text: '', labels: [] };
-    const details = await Promise.all(selected.map((item) => call({ action: 'get', id: item.id })));
-    const labels = [];
-    const blocks = [];
-    for (const detail of details) {
-      const item = detail.item || {};
-      const sections = Array.isArray(item.report?.sections) ? item.report.sections : [];
-      const safeSections = sections
-        .filter((section) => !/(健康|疾病|病症|醫療|財務|財運|宗教)/.test(String(section?.title || '')))
-        .slice(0, 10)
-        .map((section) => `${matchingContextText(section.title, 100)}：${matchingContextText(section.content, 420)}`)
-        .filter((value) => value.length > 2);
-      if (!safeSections.length) continue;
-      const label = matchingContextText(item.productLabel, 60) || '数字科学報告';
-      labels.push(label);
-      blocks.push(`${label}\n${safeSections.join('\n')}`);
-    }
-    return { text: blocks.join('\n\n').slice(0, 6000), labels };
-  } catch (error) {
-    console.warn('Number science matching context unavailable', error);
-    return { text: '', labels: [] };
-  }
 }
 
 async function mergedAdminAccess(env, member) {
@@ -2288,7 +2126,8 @@ async function app(request, env, ctx) {
       const rules = await env.DB.prepare(`
         SELECT id, event_type, points, award_frequency, status, rule_version, created_at, updated_at
         FROM point_rules WHERE program_id = 'program_main'
-          AND event_type NOT IN ('member_joined','referral_attendance_reward','registration_completed','number_science_other_report')
+          AND event_type NOT IN ('member_joined','referral_attendance_reward','registration_completed')
+          AND event_type NOT LIKE 'number_science_%'
         ORDER BY event_type ASC, updated_at DESC
       `).all();
       return json({ success: true, rules: rules.results || [] });

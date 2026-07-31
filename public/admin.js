@@ -351,17 +351,17 @@ $("#ruleForm")?.addEventListener("submit", (event) =>
   })).then(() => loadPointRules()),
 );
 const ruleFrequencyLabel = { once:"僅一次", daily:"每日一次", per_completion:"完成給一次" };
-const ruleEventLabel = { member_joined:"加入會員", registration_completed:"完成註冊", share_referral:"分享邀約成功", daily_ad_checkin:"簽到打卡", course_registered:"課程報名", attendance_verified:"課程簽到", referral_attendance_reward:"所屬會員完成獎勵", task_completed:"任務完成", number_science_full_report:"数字科学完整報告扣點", number_science_daily_report:"数字科学流日報告扣點", number_science_matching_report:"数字科学配對報告扣點", number_science_workplace_report:"数字科学職場報告扣點", number_science_love_report:"数字科學愛情報告扣點", card_collection_reward:"收藏名片成功贈點", admin_points_grant:"後台贈點", admin_points_deduct:"後台扣點", admin_points_backfill:"補登舊點數", daily_ad_view:"簽到觀看", daily_ad_view_completed:"簽到觀看", daily_view:"簽到觀看" };
+const ruleEventLabel = { member_joined:"加入會員", registration_completed:"完成註冊", share_referral:"分享邀約成功", daily_ad_checkin:"簽到打卡", course_registered:"課程報名", attendance_verified:"課程簽到", referral_attendance_reward:"所屬會員完成獎勵", task_completed:"任務完成", card_collection_reward:"收藏名片成功贈點", admin_points_grant:"後台贈點", admin_points_deduct:"後台扣點", admin_points_backfill:"補登舊點數", daily_ad_view:"簽到觀看", daily_ad_view_completed:"簽到觀看", daily_view:"簽到觀看" };
 async function loadPointRules() {
   const container = $("#ruleList");
   if (!container) return;
   try {
     const data = await api("/v1/admin/point-rules");
     container.innerHTML = data.rules.length ? data.rules.map((rule) => {
-      const serviceRule=rule.event_type.startsWith("number_science_")||rule.event_type==="card_collection_reward";
-      const deduction=rule.event_type.startsWith("number_science_");
-      const direction=deduction?"扣點":"贈點";
-      const pointLabel=deduction?"每次扣除（K點）":"每次贈送（K點）";
+      const serviceRule=rule.event_type==="card_collection_reward";
+      const deduction=false;
+      const direction="贈點";
+      const pointLabel="每次贈送（K點）";
       return `<form class="rule-row ${deduction?"deduction-rule":"grant-rule"}" data-rule-id="${rule.id}"><div class="rule-event" data-event-type="${rule.event_type}"><span class="rule-direction ${deduction?"deduct":"grant"}">${direction}</span>${ruleEventLabel[rule.event_type] || rule.event_type}<small>${rule.event_type}</small></div><label>${pointLabel}<input data-rule-field="points" type="number" min="${serviceRule?1:0}" value="${Number(rule.points)}"></label><label>執行頻率<select data-rule-field="frequency">${Object.entries(ruleFrequencyLabel).map(([key,label]) => `<option value="${key}" ${rule.award_frequency === key ? "selected" : ""} ${serviceRule && key !== "per_completion" ? "disabled" : ""}>${serviceRule&&key==="per_completion"?"每次成功交易":label}</option>`).join("")}</select></label><label>狀態<select data-rule-field="status">${["draft","active","paused","archived"].map((value) => `<option value="${value}" ${rule.status === value ? "selected" : ""}>${value === "draft" ? "草稿" : value === "active" ? "啟用" : value === "paused" ? "暫停" : "封存"}</option>`).join("")}</select></label><button class="rule-save" type="submit">儲存${direction}</button></form>`;
     }).join("") : '<p class="muted">尚未建立點數規則。</p>';
   } catch (error) {
@@ -381,8 +381,7 @@ $("#ruleList").addEventListener("submit", async (event) => {
         awardFrequency: form.querySelector('[data-rule-field="frequency"]').value,
         status: form.querySelector('[data-rule-field="status"]').value,
       });
-      const eventType=form.querySelector(".rule-event").dataset.eventType;
-      showStatus(eventType.startsWith("number_science_")?"扣點規則已儲存":"贈點規則已儲存");
+      showStatus("贈點規則已儲存");
     }, { busy: "儲存中…", success: "已儲存" });
     await loadPointRules();
   } catch (error) {
