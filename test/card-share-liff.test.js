@@ -41,9 +41,33 @@ test("compact card share LIFF opens the picker without member-session dependency
   assert.match(html, /\/v1\/cards\/"\+encodeURIComponent\(CARD_ID\)\+"\/public/);
   assert.match(html, /名片分享失敗/);
   assert.match(html, /error&&error\.code/);
-  assert.match(html, /\/\^https:\\\/\\\/\/i/);
+  assert.match(html, /new URL\(clean\(value,2048\),API_ORIGIN\)/);
+  assert.match(html, /seenActions\.has\(key\)/);
   assert.match(html, /改用 LINE 一般分享/);
   assert.doesNotMatch(html, /klinkweb_session|authorization:|Bearer/);
   const inlineScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)?.[1] || "";
   assert.doesNotThrow(() => new Function(inlineScript));
+
+  const elements = new Map();
+  const document = { querySelector(selector) { if (!elements.has(selector)) elements.set(selector, { textContent:"", hidden:true, href:"" }); return elements.get(selector); } };
+  let sharedMessages = null;
+  const liff = {
+    init: async () => {}, isLoggedIn: () => true, isApiAvailable: () => true,
+    shareTargetPicker: async (messages) => { sharedMessages = messages; return false; },
+    isInClient: () => false,
+  };
+  const fetch = async () => ({ ok:true, json:async () => ({ card:{
+    displayName:"Tony", coverUrl:"/card-default-cover.jpg",
+    buttons:[
+      { label:"店家地址", value:"https://maps.example/store" },
+      { label:"店家地址", value:"https://maps.example/store" },
+    ],
+  } }) });
+  new Function("document", "location", "liff", "fetch", "setTimeout", inlineScript)(
+    document, { href:"https://akaffit-team.example/r/card-share?shareCardId=card_demo" }, liff, fetch, () => {},
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  const bubble = sharedMessages?.[0]?.contents;
+  assert.equal(bubble?.hero?.url, "https://akaffit-team.example/card-default-cover.jpg");
+  assert.deepEqual(bubble?.footer?.contents.map((item) => item.action.label), ["查看完整名片", "店家地址"]);
 });

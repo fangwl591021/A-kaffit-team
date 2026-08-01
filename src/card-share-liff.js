@@ -21,6 +21,7 @@ const mark=document.querySelector("#mark");
 const fallback=document.querySelector("#fallback");
 const clean=(value,max=300)=>String(value||"").trim().slice(0,max);
 const validUri=(value)=>/^(?:https?:|tel:|mailto:|line:)/i.test(clean(value,2048))?clean(value,2048):"";
+const absoluteHttps=(value)=>{try{const url=new URL(clean(value,2048),API_ORIGIN);return url.protocol==="https:"?url.href:"";}catch{return "";}};
 const show=(heading,text,error="")=>{title.textContent=heading;message.textContent=text||"";detail.textContent=error||"";};
 const enableFallback=(name="A-KAFFIT TEAM 會員")=>{fallback.hidden=false;fallback.href="https://line.me/R/share?text="+encodeURIComponent("電子名片｜"+name+"\\n"+PUBLIC_CARD_URL);};
 const button=(label,uri,color="#B95121")=>({type:"button",style:"primary",height:"sm",color,action:{type:"uri",label:clean(label,20),uri}});
@@ -31,8 +32,16 @@ const flexFor=(card)=>{
   if(card.englishName)contents.push({type:"text",text:clean(card.englishName,80),size:"sm",color:"#857581",margin:"sm",align:"center",wrap:true});
   if(meta)contents.push({type:"text",text:meta,size:"sm",color:"#5E5260",align:"center",wrap:true,margin:"md",maxLines:3});
   if(card.serviceDescription)contents.push({type:"text",text:clean(card.serviceDescription,500),size:"sm",color:"#5E5260",wrap:true,margin:"md",maxLines:4});
-  const actions=[{label:"查看完整名片",value:PUBLIC_CARD_URL,color:"#B95121"},...(Array.isArray(card.buttons)?card.buttons:[])].filter(item=>item&&item.enabled!==false&&clean(item.label,20)&&validUri(item.value)).slice(0,4);
-  const cover=/^https:\\/\\//i.test(clean(card.coverUrl,2048))?clean(card.coverUrl,2048):"";
+  const seenActions=new Set();
+  const actions=[{label:"查看完整名片",value:PUBLIC_CARD_URL,color:"#B95121"},...(Array.isArray(card.buttons)?card.buttons:[])].filter(item=>{
+    if(!item||item.enabled===false)return false;
+    const label=clean(item.label,20);const uri=validUri(item.value);
+    if(!label||!uri)return false;
+    const key=label.toLocaleLowerCase()+"|"+uri;
+    if(seenActions.has(key))return false;
+    seenActions.add(key);return true;
+  }).slice(0,4);
+  const cover=absoluteHttps(card.coverUrl);
   return {type:"bubble",size:"mega",...(cover?{hero:{type:"image",url:cover,size:"full",aspectRatio:"20:13",aspectMode:"cover",action:{type:"uri",uri:PUBLIC_CARD_URL}}}:{}),header:{type:"box",layout:"horizontal",justifyContent:"flex-end",paddingAll:"8px",contents:[{type:"box",layout:"vertical",justifyContent:"center",backgroundColor:"#B95121",width:"65px",height:"25px",cornerRadius:"25px",contents:[{type:"text",text:"分享",weight:"bold",align:"center",color:"#FFFFFF",size:"xs"}],action:{type:"uri",uri:PICKER_URL}}]},body:{type:"box",layout:"vertical",paddingAll:"18px",contents},footer:{type:"box",layout:"vertical",spacing:"sm",contents:actions.map(item=>button(item.label,validUri(item.value),item.color||"#B95121"))}};
 };
 const cleanRedirect=()=>{const url=new URL(location.href);["code","state","scope","error","error_description","liff.state","liff.referrer"].forEach(key=>url.searchParams.delete(key));url.searchParams.set("shareCardId",CARD_ID);url.searchParams.set("share","1");return url.toString();};
