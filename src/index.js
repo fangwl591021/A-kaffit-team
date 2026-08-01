@@ -1,3 +1,4 @@
+import { personalCardShareLiffHtml } from "./card-share-liff.js";
 import {
   createSession,
   SESSION_MAX_AGE_SECONDS,
@@ -691,6 +692,12 @@ async function app(request, env, ctx) {
       : json({ success: false, error: "文章不存在" }, 404);
   }
 
+  if (request.method === "GET" && url.pathname === "/r/card-share") {
+    const cardId = String(url.searchParams.get("shareCardId") || "").trim();
+    if (!env.CARD_SHARE_LIFF_ID) return new Response("尚未設定名片分享 LIFF", { status: 503 });
+    if (!/^[A-Za-z0-9_-]{1,160}$/.test(cardId)) return new Response("名片分享網址無效", { status: 400 });
+    return personalCardShareLiffHtml({ liffId:env.CARD_SHARE_LIFF_ID, origin:url.origin, cardId });
+  }
   if (request.method === "GET" && (url.pathname === "/r/checkin" || url.pathname === "/r/course-checkin")) {
     // Same two-step Compact LIFF pattern as MLM:
     // QR -> LIFF -> this endpoint with liff.state -> compact verification screen.
