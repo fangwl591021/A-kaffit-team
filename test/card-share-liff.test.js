@@ -16,7 +16,9 @@ test("personal cards use the dedicated LIFF share app without replacing member l
   assert.match(app, /function cardSharePickerUrl\(cardId\)[\s\S]*state\.config\?\.cardShareLiffId \|\| state\.config\?\.liffId/);
   assert.match(app, /https:\/\/liff\.line\.me\/\$\{encodeURIComponent\(liffId\)\}\/r\/card-share/);
   assert.match(wrangler, /"\/r\/\*"/);
+  assert.match(wrangler, /"\/", "\/api\/\*"/);
   assert.match(worker, /url\.pathname === "\/r\/card-share"[\s\S]*personalCardShareLiffHtml/);
+  assert.match(worker, /url\.searchParams\.get\("liff\.state"\)[\s\S]*stateUrl\.pathname === "\/r\/card-share"[\s\S]*personalCardShareLiffHtml/);
   assert.match(app, /url\.searchParams\.set\("shareCardId", cardId\)[\s\S]*url\.searchParams\.set\("share", "1"\)/);
   assert.match(app, /async function sharePersonalCard\(card\)[\s\S]*location\.assign\(cardSharePickerUrl\(card\.id\)\)/);
   assert.match(app, /function cardLineShareUrl\(cardId, card = null\)[\s\S]*https:\/\/line\.me\/R\/share\?text=/);
@@ -39,6 +41,7 @@ test("compact card share LIFF opens the picker without member-session dependency
   assert.match(html, /\/v1\/cards\/"\+encodeURIComponent\(CARD_ID\)\+"\/public/);
   assert.match(html, /名片分享失敗/);
   assert.match(html, /error&&error\.code/);
+  assert.match(html, /\/\^https:\\\/\\\/\/i/);
   assert.match(html, /改用 LINE 一般分享/);
   assert.doesNotMatch(html, /klinkweb_session|authorization:|Bearer/);
   const inlineScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)?.[1] || "";

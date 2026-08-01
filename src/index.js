@@ -640,6 +640,29 @@ async function officialAkaffitSite() {
 
 async function app(request, env, ctx) {
   const url = new URL(request.url);
+  let cardShareId = "";
+  if (request.method === "GET" && url.pathname === "/r/card-share") {
+    cardShareId = String(url.searchParams.get("shareCardId") || "").trim();
+  } else if (request.method === "GET" && url.pathname === "/") {
+    const liffState = url.searchParams.get("liff.state");
+    if (liffState) {
+      try {
+        const stateUrl = new URL(liffState, url.origin);
+        if (stateUrl.pathname === "/r/card-share") {
+          cardShareId = String(stateUrl.searchParams.get("shareCardId") || "").trim();
+        }
+      } catch {
+        cardShareId = "";
+      }
+    } else if (url.searchParams.get("share") === "1") {
+      cardShareId = String(url.searchParams.get("shareCardId") || "").trim();
+    }
+  }
+  if (cardShareId) {
+    if (!env.CARD_SHARE_LIFF_ID) return new Response("尚未設定名片分享 LIFF", { status: 503 });
+    if (!/^[A-Za-z0-9_-]{1,160}$/.test(cardShareId)) return new Response("名片分享網址無效", { status: 400 });
+    return personalCardShareLiffHtml({ liffId: env.CARD_SHARE_LIFF_ID, origin: url.origin, cardId: cardShareId });
+  }
   if (
     (request.method === "GET" || request.method === "HEAD") &&
     url.pathname === "/admin"
@@ -692,12 +715,7 @@ async function app(request, env, ctx) {
       : json({ success: false, error: "文章不存在" }, 404);
   }
 
-  if (request.method === "GET" && url.pathname === "/r/card-share") {
-    const cardId = String(url.searchParams.get("shareCardId") || "").trim();
-    if (!env.CARD_SHARE_LIFF_ID) return new Response("尚未設定名片分享 LIFF", { status: 503 });
-    if (!/^[A-Za-z0-9_-]{1,160}$/.test(cardId)) return new Response("名片分享網址無效", { status: 400 });
-    return personalCardShareLiffHtml({ liffId:env.CARD_SHARE_LIFF_ID, origin:url.origin, cardId });
-  }
+
   if (request.method === "GET" && (url.pathname === "/r/checkin" || url.pathname === "/r/course-checkin")) {
     // Same two-step Compact LIFF pattern as MLM:
     // QR -> LIFF -> this endpoint with liff.state -> compact verification screen.

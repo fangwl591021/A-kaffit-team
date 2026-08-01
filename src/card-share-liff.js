@@ -32,7 +32,7 @@ const flexFor=(card)=>{
   if(meta)contents.push({type:"text",text:meta,size:"sm",color:"#5E5260",align:"center",wrap:true,margin:"md",maxLines:3});
   if(card.serviceDescription)contents.push({type:"text",text:clean(card.serviceDescription,500),size:"sm",color:"#5E5260",wrap:true,margin:"md",maxLines:4});
   const actions=[{label:"查看完整名片",value:PUBLIC_CARD_URL,color:"#B95121"},...(Array.isArray(card.buttons)?card.buttons:[])].filter(item=>item&&item.enabled!==false&&clean(item.label,20)&&validUri(item.value)).slice(0,4);
-  const cover=/^https:\/\//i.test(clean(card.coverUrl,2048))?clean(card.coverUrl,2048):"";
+  const cover=/^https:\\/\\//i.test(clean(card.coverUrl,2048))?clean(card.coverUrl,2048):"";
   return {type:"bubble",size:"mega",...(cover?{hero:{type:"image",url:cover,size:"full",aspectRatio:"20:13",aspectMode:"cover",action:{type:"uri",uri:PUBLIC_CARD_URL}}}:{}),header:{type:"box",layout:"horizontal",justifyContent:"flex-end",paddingAll:"8px",contents:[{type:"box",layout:"vertical",justifyContent:"center",backgroundColor:"#B95121",width:"65px",height:"25px",cornerRadius:"25px",contents:[{type:"text",text:"分享",weight:"bold",align:"center",color:"#FFFFFF",size:"xs"}],action:{type:"uri",uri:PICKER_URL}}]},body:{type:"box",layout:"vertical",paddingAll:"18px",contents},footer:{type:"box",layout:"vertical",spacing:"sm",contents:actions.map(item=>button(item.label,validUri(item.value),item.color||"#B95121"))}};
 };
 const cleanRedirect=()=>{const url=new URL(location.href);["code","state","scope","error","error_description","liff.state","liff.referrer"].forEach(key=>url.searchParams.delete(key));url.searchParams.set("shareCardId",CARD_ID);url.searchParams.set("share","1");return url.toString();};
