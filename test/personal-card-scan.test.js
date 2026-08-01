@@ -4,6 +4,7 @@ import test from "node:test";
 
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const worker = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+const cards = readFileSync(new URL("../src/cards.js", import.meta.url), "utf8");
 
 test("members can create their electronic card from the existing photo OCR flow", () => {
   const emptyStart = app.indexOf('if (!myCard)');
@@ -23,6 +24,20 @@ test("members can create their electronic card from the existing photo OCR flow"
   assert.doesNotMatch(scan, /\/submit|queueAndFulfillCardCollectionReward/);
 });
 
+test("LINE-created cards start with the A-kaffit branded example", () => {
+  const cover = readFileSync(new URL("../public/akaffit-line-card-cover.png", import.meta.url));
+  assert.equal(cover.readUInt32BE(16), 1000);
+  assert.equal(cover.readUInt32BE(20), 665);
+  assert.match(app, /function lineGeneratedCardExample\(\)[\s\S]*akaffit-line-card-cover\.png/);
+  assert.match(app, /獨家工藝｜十年研發・酒釀循環發酵/);
+  assert.match(app, /純淨低敏｜零負擔咖啡・自在安心喝/);
+  assert.match(app, /大師把關｜SCA認證精品豆・大濾掛/);
+  assert.match(app, /粉絲專頁[\s\S]*facebook\.com\/qr\?id=61565353201161/);
+  assert.match(app, /加LINE好友[\s\S]*page\.line\.me\/akaffit/);
+  assert.match(app, /官方網站[\s\S]*www\.akaffit\.com\/index/);
+  assert.match(app, /body:JSON\.stringify\(lineGeneratedCardExample\(\)\)/);
+  assert.match(cards, /buttonDefaultsSeeded\s*\? storedButtons\.slice\(0, 4\)/);
+});
 test("personal card import stores the scan as a cover without awarding collection points", () => {
   const start = worker.indexOf("const confirmPersonalCardImport");
   const end = worker.indexOf('if (url.pathname === "/v1/tasks"', start);

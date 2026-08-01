@@ -108,7 +108,9 @@ function parseVersions(row) {
     const source = input?.[version] || {};
     const storedButtons = normaliseButtons(source.buttons || (version === 'standard' ? legacyButtons : []));
     const buttonDefaultsSeeded = source.buttonDefaultsSeeded === true;
-    const buttons = enforceFixedCardActions(seedDefaultButtons(storedButtons, defaults, buttonDefaultsSeeded), defaults);
+    const buttons = buttonDefaultsSeeded
+      ? storedButtons.slice(0, 4).map((button, index) => ({ ...button, order:index + 1 }))
+      : enforceFixedCardActions(seedDefaultButtons(storedButtons, defaults, false), defaults);
     result[version] = {
       coverUrl: text(source.coverUrl || (version === 'standard' ? row.cover_url : ''), 2048) || DEFAULT_CARD_COVER_URL,
       title: text(source.title, 120),
