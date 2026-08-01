@@ -781,6 +781,7 @@ async function app(request, env, ctx) {
     return json({
       success: true,
       liffId: env.LIFF_ID || "",
+      cardShareLiffId: env.CARD_SHARE_LIFF_ID || env.LIFF_ID || "",
       checkinLiffId: env.CHECKIN_LIFF_ID || "",
       buildVersion: "20260722-mlm-ai-2",
       cardAiProvider: env.MLM_WORKER ? "mlm-service" : "local-fallback",
