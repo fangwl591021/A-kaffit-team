@@ -42,6 +42,7 @@ test("compact card share LIFF opens the picker without member-session dependency
   assert.match(html, /名片分享失敗/);
   assert.match(html, /error&&error\.code/);
   assert.match(html, /new URL\(clean\(value,2048\),API_ORIGIN\)/);
+  assert.match(html, /versionMeta=.*standard.*20:13.*full.*2:3.*square.*1:1/);
   assert.match(html, /seenActions\.has\(key\)/);
   assert.match(html, /改用 LINE 一般分享/);
   assert.doesNotMatch(html, /klinkweb_session|authorization:|Bearer/);
@@ -57,8 +58,9 @@ test("compact card share LIFF opens the picker without member-session dependency
     isInClient: () => false,
   };
   const fetch = async () => ({ ok:true, json:async () => ({ card:{
-    displayName:"Tony", coverUrl:"/card-default-cover.jpg",
+    displayName:"Tony", coverUrl:"/card-default-cover.jpg", selectedVersion:"full",
     buttons:[
+      { label:"撥打電話", value:"tel:0927136847" },
       { label:"店家地址", value:"https://maps.example/store" },
       { label:"店家地址", value:"https://maps.example/store" },
     ],
@@ -69,5 +71,7 @@ test("compact card share LIFF opens the picker without member-session dependency
   await new Promise((resolve) => setImmediate(resolve));
   const bubble = sharedMessages?.[0]?.contents;
   assert.equal(bubble?.hero?.url, "https://akaffit-team.example/card-default-cover.jpg");
-  assert.deepEqual(bubble?.footer?.contents.map((item) => item.action.label), ["查看完整名片", "店家地址"]);
+  assert.equal(bubble?.size, "giga");
+  assert.equal(bubble?.hero?.aspectRatio, "2:3");
+  assert.deepEqual(bubble?.footer?.contents.map((item) => item.action.label), ["撥打電話", "店家地址"]);
 });

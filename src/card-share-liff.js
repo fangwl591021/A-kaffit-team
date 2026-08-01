@@ -26,14 +26,17 @@ const show=(heading,text,error="")=>{title.textContent=heading;message.textConte
 const enableFallback=(name="A-KAFFIT TEAM 會員")=>{fallback.hidden=false;fallback.href="https://line.me/R/share?text="+encodeURIComponent("電子名片｜"+name+"\\n"+PUBLIC_CARD_URL);};
 const button=(label,uri,color="#B95121")=>({type:"button",style:"primary",height:"sm",color,action:{type:"uri",label:clean(label,20),uri}});
 const flexFor=(card)=>{
-  const displayName=clean(card.displayName,80)||"A-KAFFIT TEAM 會員";
+  const versionId=["standard","full","square"].includes(card.selectedVersion)?card.selectedVersion:"standard";
+  const versionMeta={standard:{aspect:"20:13",size:"mega"},full:{aspect:"2:3",size:"giga"},square:{aspect:"1:1",size:"mega"}}[versionId];
+  const displayName=clean(card.versionTitle||card.displayName,80)||"A-KAFFIT TEAM 會員";
   const meta=[clean(card.companyName,120),[clean(card.jobTitle,80),clean(card.department,80)].filter(Boolean).join("｜")].filter(Boolean).join("\\n");
-  const contents=[{type:"text",text:displayName,weight:"bold",size:"xl",color:"#3D2920",align:"center",wrap:true}];
+  const serviceAlign=({left:"start",center:"center",right:"end"})[card.descriptionTextAlign||card.serviceTextAlign]||"start";
+  const contents=[{type:"text",text:displayName,weight:"bold",size:"xl",color:"#2A2030",align:"center",wrap:true}];
   if(card.englishName)contents.push({type:"text",text:clean(card.englishName,80),size:"sm",color:"#857581",margin:"sm",align:"center",wrap:true});
-  if(meta)contents.push({type:"text",text:meta,size:"sm",color:"#5E5260",align:"center",wrap:true,margin:"md",maxLines:3});
-  if(card.serviceDescription)contents.push({type:"text",text:clean(card.serviceDescription,500),size:"sm",color:"#5E5260",wrap:true,margin:"md",maxLines:4});
+  if(meta)contents.push({type:"text",text:meta,size:"sm",color:"#5E5260",align:"center",wrap:true,margin:"md",maxLines:2});
+  if(card.serviceDescription)contents.push({type:"text",text:clean(card.serviceDescription,500),size:"sm",color:"#5E5260",align:serviceAlign,wrap:true,margin:"md",maxLines:4});
   const seenActions=new Set();
-  const actions=[{label:"查看完整名片",value:PUBLIC_CARD_URL,color:"#B95121"},...(Array.isArray(card.buttons)?card.buttons:[])].filter(item=>{
+  const actions=(Array.isArray(card.buttons)?card.buttons:[]).filter(item=>{
     if(!item||item.enabled===false)return false;
     const label=clean(item.label,20);const uri=validUri(item.value);
     if(!label||!uri)return false;
@@ -42,7 +45,7 @@ const flexFor=(card)=>{
     seenActions.add(key);return true;
   }).slice(0,4);
   const cover=absoluteHttps(card.coverUrl);
-  return {type:"bubble",size:"mega",...(cover?{hero:{type:"image",url:cover,size:"full",aspectRatio:"20:13",aspectMode:"cover",action:{type:"uri",uri:PUBLIC_CARD_URL}}}:{}),header:{type:"box",layout:"horizontal",justifyContent:"flex-end",paddingAll:"8px",contents:[{type:"box",layout:"vertical",justifyContent:"center",backgroundColor:"#B95121",width:"65px",height:"25px",cornerRadius:"25px",contents:[{type:"text",text:"分享",weight:"bold",align:"center",color:"#FFFFFF",size:"xs"}],action:{type:"uri",uri:PICKER_URL}}]},body:{type:"box",layout:"vertical",paddingAll:"18px",contents},footer:{type:"box",layout:"vertical",spacing:"sm",contents:actions.map(item=>button(item.label,validUri(item.value),item.color||"#B95121"))}};
+  return {type:"bubble",size:versionMeta.size,...(cover?{hero:{type:"image",url:cover,size:"full",aspectRatio:versionMeta.aspect,aspectMode:"cover",action:{type:"uri",uri:PUBLIC_CARD_URL}}}:{}),header:{type:"box",layout:"horizontal",justifyContent:"flex-end",paddingAll:"8px",contents:[{type:"box",layout:"vertical",justifyContent:"center",backgroundColor:"#EF4444",width:"65px",height:"25px",cornerRadius:"25px",contents:[{type:"text",text:"分享",weight:"bold",align:"center",color:"#FFFFFF",size:"xs"}],action:{type:"uri",uri:PICKER_URL}}]},body:{type:"box",layout:"vertical",paddingAll:"18px",contents},footer:{type:"box",layout:"vertical",spacing:"sm",contents:actions.map(item=>button(item.label,validUri(item.value),item.color||"#B96072"))}};
 };
 const cleanRedirect=()=>{const url=new URL(location.href);["code","state","scope","error","error_description","liff.state","liff.referrer"].forEach(key=>url.searchParams.delete(key));url.searchParams.set("shareCardId",CARD_ID);url.searchParams.set("share","1");return url.toString();};
 (async()=>{
