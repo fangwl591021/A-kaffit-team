@@ -31,3 +31,16 @@ test("Golden Journey supports swipe, controls, and ten-second autoplay", () => {
   assert.match(css, /\.ak-golden-slide\{[^}]*min-width:100%[^}]*scroll-snap-align:start/);
   assert.match(css, /\.ak-golden-slide img\{[^}]*object-fit:contain/);
 });
+
+test("coffee academy slides open an accessible standalone viewer", () => {
+  const app = source("public/app.js");
+  const css = source("public/akaffit.css");
+  assert.match(app, /點擊投影片可放大單獨觀看/);
+  assert.match(app, /function showGoldenJourneyViewer\(slideIndex\)/);
+  assert.match(app, /role="dialog" aria-modal="true"/);
+  assert.match(app, /data-close-golden-viewer/);
+  assert.match(app, /event\.key === "Escape"/);
+  assert.match(app, /showGoldenJourneyViewer\(slide\.dataset\.goldenSlide\)/);
+  assert.match(css, /\.ak-golden-dialog\{[^}]*position:fixed[^}]*z-index:1500/);
+  assert.match(css, /\.ak-golden-viewer-image\{[^}]*object-fit:contain/);
+});
