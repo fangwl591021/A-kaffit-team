@@ -23,7 +23,8 @@ const clean=(value,max=300)=>String(value||"").trim().slice(0,max);
 const validUri=(value)=>/^(?:https?:|tel:|mailto:|line:)/i.test(clean(value,2048))?clean(value,2048):"";
 const absoluteHttps=(value)=>{try{const url=new URL(clean(value,2048),API_ORIGIN);return url.protocol==="https:"?url.href:"";}catch{return "";}};
 const show=(heading,text,error="")=>{title.textContent=heading;message.textContent=text||"";detail.textContent=error||"";};
-const enableFallback=(name="A-KAFFIT TEAM 會員")=>{fallback.hidden=false;fallback.href="https://line.me/R/share?text="+encodeURIComponent("電子名片｜"+name+"\\n"+PUBLIC_CARD_URL);};
+const urlWithInvite=(base,card)=>{const url=new URL(base);if(card&&card.shareInvite)url.searchParams.set("invite",card.shareInvite);return url.toString();};
+const enableFallback=(name="A-KAFFIT TEAM 會員",card=null)=>{fallback.hidden=false;fallback.href="https://line.me/R/share?text="+encodeURIComponent("電子名片｜"+name+"\\n"+urlWithInvite(PUBLIC_CARD_URL,card));};
 const button=(label,uri,color="#B95121")=>({type:"button",style:"primary",height:"sm",color,action:{type:"uri",label:clean(label,20),uri}});
 const flexFor=(card)=>{
   const versionId=["standard","full","square"].includes(card.selectedVersion)?card.selectedVersion:"standard";
@@ -45,7 +46,9 @@ const flexFor=(card)=>{
     seenActions.add(key);return true;
   }).slice(0,4);
   const cover=absoluteHttps(card.coverUrl);
-  return {type:"bubble",size:versionMeta.size,...(cover?{hero:{type:"image",url:cover,size:"full",aspectRatio:versionMeta.aspect,aspectMode:"cover",action:{type:"uri",uri:PUBLIC_CARD_URL}}}:{}),header:{type:"box",layout:"horizontal",justifyContent:"flex-end",paddingAll:"8px",contents:[{type:"box",layout:"vertical",justifyContent:"center",backgroundColor:"#EF4444",width:"65px",height:"25px",cornerRadius:"25px",contents:[{type:"text",text:"分享",weight:"bold",align:"center",color:"#FFFFFF",size:"xs"}],action:{type:"uri",uri:PICKER_URL}}]},body:{type:"box",layout:"vertical",paddingAll:"18px",contents},footer:{type:"box",layout:"vertical",spacing:"sm",contents:actions.map(item=>button(item.label,validUri(item.value),item.color||"#B96072"))}};
+  const publicCardUrl=urlWithInvite(PUBLIC_CARD_URL,card);
+  const pickerUrl=urlWithInvite(PICKER_URL,card);
+  return {type:"bubble",size:versionMeta.size,...(cover?{hero:{type:"image",url:cover,size:"full",aspectRatio:versionMeta.aspect,aspectMode:"cover",action:{type:"uri",uri:publicCardUrl}}}:{}),header:{type:"box",layout:"horizontal",justifyContent:"flex-end",paddingAll:"8px",contents:[{type:"box",layout:"vertical",justifyContent:"center",backgroundColor:"#EF4444",width:"65px",height:"25px",cornerRadius:"25px",contents:[{type:"text",text:"分享",weight:"bold",align:"center",color:"#FFFFFF",size:"xs"}],action:{type:"uri",uri:pickerUrl}}]},body:{type:"box",layout:"vertical",paddingAll:"18px",contents},footer:{type:"box",layout:"vertical",spacing:"sm",contents:actions.map(item=>button(item.label,validUri(item.value),item.color||"#B96072"))}};
 };
 const cleanRedirect=()=>{const url=new URL(location.href);["code","state","scope","error","error_description","liff.state","liff.referrer"].forEach(key=>url.searchParams.delete(key));url.searchParams.set("shareCardId",CARD_ID);url.searchParams.set("share","1");return url.toString();};
 (async()=>{
@@ -58,7 +61,7 @@ const cleanRedirect=()=>{const url=new URL(location.href);["code","state","scope
     if(!response.ok||!payload.card)throw new Error(payload.error||"名片不存在或尚未公開");
     const name=clean(payload.card.displayName,80)||"A-KAFFIT TEAM 會員";
     mark.textContent=name.slice(0,1)||"A";
-    enableFallback(name);
+    enableFallback(name,payload.card);
     const result=await liff.shareTargetPicker([{type:"flex",altText:"電子名片｜"+name,contents:flexFor(payload.card)}]);
     if(result===false){show("已取消分享","你尚未選擇分享對象，可以再次開啟分享。");return;}
     fallback.hidden=true;show("名片已分享","已成功傳送到你選擇的 LINE 好友或群組。");

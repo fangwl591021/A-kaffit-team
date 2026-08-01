@@ -13,14 +13,14 @@ test("personal cards use the dedicated LIFF share app without replacing member l
   assert.match(wrangler, /"CARD_SHARE_LIFF_ID": "2010925044-hPtKkoKO"/);
   assert.match(worker, /cardShareLiffId: env\.CARD_SHARE_LIFF_ID \|\| env\.LIFF_ID \|\| ""/);
   assert.match(app, /state\.cardShareMode[\s\S]*state\.config\?\.cardShareLiffId \|\| state\.config\?\.liffId/);
-  assert.match(app, /function cardSharePickerUrl\(cardId\)[\s\S]*state\.config\?\.cardShareLiffId \|\| state\.config\?\.liffId/);
+  assert.match(app, /function cardSharePickerUrl\(cardId, card = null\)[\s\S]*state\.config\?\.cardShareLiffId \|\| state\.config\?\.liffId/);
   assert.match(app, /https:\/\/liff\.line\.me\/\$\{encodeURIComponent\(liffId\)\}\/r\/card-share/);
   assert.match(wrangler, /"\/r\/\*"/);
   assert.match(wrangler, /"\/", "\/api\/\*"/);
   assert.match(worker, /url\.pathname === "\/r\/card-share"[\s\S]*personalCardShareLiffHtml/);
   assert.match(worker, /url\.searchParams\.get\("liff\.state"\)[\s\S]*stateUrl\.pathname === "\/r\/card-share"[\s\S]*personalCardShareLiffHtml/);
-  assert.match(app, /url\.searchParams\.set\("shareCardId", cardId\)[\s\S]*url\.searchParams\.set\("share", "1"\)/);
-  assert.match(app, /async function sharePersonalCard\(card\)[\s\S]*location\.assign\(cardSharePickerUrl\(card\.id\)\)/);
+  assert.match(app, /url\.searchParams\.set\("shareCardId", cardId\)[\s\S]*url\.searchParams\.set\("share", "1"\)[\s\S]*card\?\.shareInvite/);
+  assert.match(app, /async function sharePersonalCard\(card\)[\s\S]*location\.assign\(cardSharePickerUrl\(card\.id, card\)\)/);
   assert.match(app, /function cardLineShareUrl\(cardId, card = null\)[\s\S]*https:\/\/line\.me\/R\/share\?text=/);
   assert.match(app, /!liff\.isApiAvailable\?\.\("shareTargetPicker"\)[\s\S]*lineShareFallbackUrl = cardLineShareUrl\(cardId, publicCardResult\.card\)/);
   assert.match(app, /not allowed\|not available\|shareTargetPicker[\s\S]*lineShareFallbackUrl = cardLineShareUrl\(cardId, publicCardResult\?\.card\)/);
@@ -58,7 +58,7 @@ test("compact card share LIFF opens the picker without member-session dependency
     isInClient: () => false,
   };
   const fetch = async () => ({ ok:true, json:async () => ({ card:{
-    displayName:"Tony", coverUrl:"/card-default-cover.jpg", selectedVersion:"full",
+    displayName:"Tony", coverUrl:"/card-default-cover.jpg", selectedVersion:"full", shareInvite:"akm-MB-00123567",
     buttons:[
       { label:"撥打電話", value:"tel:0927136847" },
       { label:"店家地址", value:"https://maps.example/store" },
@@ -73,5 +73,7 @@ test("compact card share LIFF opens the picker without member-session dependency
   assert.equal(bubble?.hero?.url, "https://akaffit-team.example/card-default-cover.jpg");
   assert.equal(bubble?.size, "giga");
   assert.equal(bubble?.hero?.aspectRatio, "2:3");
+  assert.equal(new URL(bubble?.hero?.action?.uri).searchParams.get("invite"), "akm-MB-00123567");
+  assert.equal(new URL(bubble?.header?.contents?.[0]?.action?.uri).searchParams.get("invite"), "akm-MB-00123567");
   assert.deepEqual(bubble?.footer?.contents.map((item) => item.action.label), ["撥打電話", "店家地址"]);
 });

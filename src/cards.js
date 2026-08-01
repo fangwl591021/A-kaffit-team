@@ -1,4 +1,4 @@
-import { newId } from './member-repository.js';
+import { memberReferralToken, newId } from './member-repository.js';
 
 const CARD_COLUMNS = `
   id, platform_user_id, display_name, english_name, company_name, job_title, department,
@@ -163,9 +163,26 @@ function cardFromRow(row, publicView = false) {
   return publicView ? card : { ...card, userId: row.platform_user_id, createdAt: row.created_at };
 }
 
+async function cardWithShareInvite(db, row, publicView = false) {
+  const card = cardFromRow(row, publicView);
+  if (!card || !row?.platform_user_id) return card;
+  const profile = await db.prepare(`
+    SELECT mp.member_number
+    FROM member_profiles mp
+    JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'
+    WHERE mp.platform_user_id = ?
+    LIMIT 1
+  `).bind(row.platform_user_id).first();
+  if (!profile?.member_number) return card;
+  try {
+    return { ...card, shareInvite: memberReferralToken(profile.member_number) };
+  } catch {
+    return card;
+  }
+}
 export async function getMyCard(db, userId) {
   const row = await db.prepare(`SELECT ${CARD_COLUMNS} FROM personal_cards WHERE platform_user_id = ? AND status != 'archived'`).bind(userId).first();
-  return cardFromRow(row);
+  return cardWithShareInvite(db, row);
 }
 
 export async function saveMyCard(db, userId, payload, member) {
@@ -222,5 +239,5 @@ export async function saveMyCard(db, userId, payload, member) {
 
 export async function getPublicCard(db, id) {
   const row = await db.prepare(`SELECT ${CARD_COLUMNS} FROM personal_cards WHERE id = ? AND status = 'published'`).bind(id).first();
-  return cardFromRow(row, true);
+  return cardWithShareInvite(db, row, true);
 }

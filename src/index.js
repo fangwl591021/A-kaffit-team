@@ -692,9 +692,12 @@ async function app(request, env, ctx) {
   }
   const publicCardPath = url.pathname.match(/^\/c\/([A-Za-z0-9_-]+)$/);
   if (request.method === "GET" && publicCardPath) {
-    return Response.redirect(`${url.origin}/?publicCard=${encodeURIComponent(publicCardPath[1])}`, 302);
-  }
-  const sharedContactPath = url.pathname.match(/^\/d\/([A-Fa-f0-9]{48})$/);
+    const landingUrl = new URL("/", url.origin);
+    landingUrl.searchParams.set("publicCard", publicCardPath[1]);
+    const inviteToken = String(url.searchParams.get("invite") || "").trim();
+    if (inviteToken) landingUrl.searchParams.set("invite", inviteToken);
+    return Response.redirect(landingUrl.toString(), 302);
+  }  const sharedContactPath = url.pathname.match(/^\/d\/([A-Fa-f0-9]{48})$/);
   if (request.method === "GET" && sharedContactPath) {
     return Response.redirect(`${url.origin}/?sharedContact=${encodeURIComponent(sharedContactPath[1])}`, 302);
   }
