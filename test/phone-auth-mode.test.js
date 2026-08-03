@@ -24,10 +24,20 @@ test('entry page clearly separates member login from new registration',()=>{
   const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
   const css=readFileSync(new URL('../public/akaffit.css',import.meta.url),'utf8');
   const worker=readFileSync(new URL('../src/index.js',import.meta.url),'utf8');
-  assert.match(app,/會員登入或註冊/);
+  assert.match(app,/<h1>使用 LINE 登入<\/h1>/);
+  assert.match(app,/id="login"/);
+  assert.match(app,/使用 LINE 登入/);
+  assert.match(app,/其他登入方式：手機＋生日/);
+  assert.match(app,/\$\("#login"\)\.onclick = startLogin/);
   assert.match(app,/data-phone-auth-mode="login">會員登入/);
   assert.match(app,/data-phone-auth-mode="register">新會員註冊/);
   assert.match(app,/intent:phoneAuthMode/);
   assert.match(css,/\.ak-auth-tabs/);
   assert.match(worker,/\['login','register'\]\.includes\(body\.intent\)/);
+});
+test('LIFF entry automatically resumes LINE Login after session recovery',()=>{
+  const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+  assert.match(app,/function shouldAutoStartLineLogin\(\)/);
+  assert.match(app,/window\.liff\?\.isInClient\?\.\(\)/);
+  assert.match(app,/if \(shouldAutoStartLineLogin\(\)\) await startLogin\(\)/);
 });
