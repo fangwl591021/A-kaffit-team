@@ -17,11 +17,19 @@ test("transient home API failures preserve the member session", () => {
   assert.doesNotMatch(recovery, /removeItem\("klinkweb_session"\).*重新載入首頁/s);
 });
 
-test("successful phone authentication renders without a redundant me request", () => {
+test("successful phone authentication re-enters the complete session flow", () => {
   const submit = app.slice(
     app.indexOf("async function submitPhoneBirthdayAuth"),
     app.indexOf("async function renderLogin"),
   );
-  assert.match(submit, /await renderAuthenticatedMember\(\)/);
-  assert.doesNotMatch(submit, /await render\(\)/);
+  assert.match(submit, /await render\(\)/);
+});
+
+test("authenticated page rendering failures preserve the session", () => {
+  const render = app.slice(
+    app.indexOf("async function render()"),
+    app.indexOf("const smartCheckinReason"),
+  );
+  assert.match(render, /return await renderAuthenticatedMember\(\)/);
+  assert.match(render, /return renderSessionRecovery\(error\)/);
 });
