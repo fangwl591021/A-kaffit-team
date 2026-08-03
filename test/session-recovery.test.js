@@ -25,6 +25,11 @@ test("successful phone authentication re-enters the complete session flow", () =
   assert.match(submit, /await render\(\)/);
 });
 
+test("anonymous boot checks the optional session endpoint without a 401", () => {
+  assert.match(app, /api\("\/v1\/session"\)/);
+  assert.match(app, /if \(!session\.member\)/);
+});
+
 test("authenticated page rendering failures preserve the session", () => {
   const render = app.slice(
     app.indexOf("async function render()"),

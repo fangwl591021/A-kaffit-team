@@ -574,6 +574,44 @@ async function akaffitYoutubeVideos() {
 }
 
 const AKAFFIT_OFFICIAL_URL = "https://www.akaffit.com/";
+const AKAFFIT_OFFICIAL_ASSETS = Object.freeze({
+  runtime: "https://www.akaffit.com/script/script.js",
+  theme: "https://www.akaffit.com/slick/slick-theme.css",
+  woff: "https://www.akaffit.com/slick/fonts/slick.woff",
+  ttf: "https://www.akaffit.com/slick/fonts/slick.ttf",
+});
+
+async function officialAkaffitAsset(kind) {
+  const target = AKAFFIT_OFFICIAL_ASSETS[kind];
+  if (!target) return new Response("Not Found", { status: 404 });
+  let upstream;
+  try {
+    upstream = await fetch(target, { headers: { accept: "*/*" } });
+  } catch (error) {
+    console.error("Akaffit official asset fetch failed", { kind, error });
+    return new Response("Official asset unavailable", { status: 502 });
+  }
+  if (!upstream.ok || !upstream.body) return new Response("Official asset unavailable", { status: 502 });
+  const contentTypes = {
+    runtime: "application/javascript; charset=utf-8",
+    theme: "text/css; charset=utf-8",
+    woff: "font/woff",
+    ttf: "font/ttf",
+  };
+  const headers = {
+    "content-type": contentTypes[kind],
+    "cache-control": "public, max-age=3600",
+    "access-control-allow-origin": "*",
+    "x-content-type-options": "nosniff",
+  };
+  if (kind === "theme") {
+    const css = (await boundedResponseText(upstream, 131072))
+      .replaceAll("./fonts/slick.woff", "/akaffit-official-font/slick.woff")
+      .replaceAll("./fonts/slick.ttf", "/akaffit-official-font/slick.ttf");
+    return new Response(css, { headers });
+  }
+  return new Response(upstream.body, { headers });
+}
 
 function officialSiteUnavailable(message = "A’kaffit 官網暫時無法載入") {
   return new Response(`<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A’kaffit</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8f3ef;color:#a6451d;font:600 16px/1.6 system-ui,sans-serif}p{padding:28px;text-align:center}</style><p>${message}</p></html>`, {
@@ -620,6 +658,26 @@ async function officialAkaffitSite() {
     .on("meta[http-equiv]", {
       element(element) {
         if ((element.getAttribute("http-equiv") || "").toLowerCase() === "content-security-policy") element.remove();
+      },
+    })
+    .on("script[src]", {
+      element(element) {
+        const src = element.getAttribute("src") || "";
+        try {
+          if (new URL(src, AKAFFIT_OFFICIAL_URL).pathname === "/script/script.js") {
+            element.setAttribute("src", "/akaffit-official-runtime");
+          }
+        } catch { /* keep malformed upstream URL untouched */ }
+      },
+    })
+    .on("link[href]", {
+      element(element) {
+        const href = element.getAttribute("href") || "";
+        try {
+          if (new URL(href, AKAFFIT_OFFICIAL_URL).pathname === "/slick/slick-theme.css") {
+            element.setAttribute("href", "/akaffit-official-slick-theme.css");
+          }
+        } catch { /* keep malformed upstream URL untouched */ }
       },
     })
     .on("body > header", { element(element) { element.setAttribute("hidden", "").setAttribute("style", "display:none!important"); } })
@@ -676,6 +734,18 @@ async function app(request, env, ctx) {
   }
   if (request.method === "GET" && url.pathname === "/akaffit-official") {
     return officialAkaffitSite();
+  }
+  if (request.method === "GET" && url.pathname === "/akaffit-official-runtime") {
+    return officialAkaffitAsset("runtime");
+  }
+  if (request.method === "GET" && url.pathname === "/akaffit-official-slick-theme.css") {
+    return officialAkaffitAsset("theme");
+  }
+  if (request.method === "GET" && url.pathname === "/akaffit-official-font/slick.woff") {
+    return officialAkaffitAsset("woff");
+  }
+  if (request.method === "GET" && url.pathname === "/akaffit-official-font/slick.ttf") {
+    return officialAkaffitAsset("ttf");
   }
   if (request.method === "GET" && url.pathname === "/v1/youtube/videos") {
     return akaffitYoutubeVideos();
@@ -918,6 +988,18 @@ async function app(request, env, ctx) {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
     const adminAccess = await mergedAdminAccess(env,member);
+    const refreshedSessionToken = await createSession(member.userId, env.SESSION_SIGNING_SECRET);
+    return json(
+      { success: true, member: { ...member, adminAccess } },
+      200,
+      { "set-cookie": sessionCookie(refreshedSessionToken) },
+    );
+  }
+
+  if (request.method === "GET" && url.pathname === "/v1/session") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: true, member: null });
+    const adminAccess = await mergedAdminAccess(env, member);
     const refreshedSessionToken = await createSession(member.userId, env.SESSION_SIGNING_SECRET);
     return json(
       { success: true, member: { ...member, adminAccess } },
@@ -2619,7 +2701,7 @@ async function app(request, env, ctx) {
 
   if (env.ASSETS) {
     const assetRequest = url.pathname === "/"
-      ? new Request(new URL("/index-20260803-120.txt", url.origin), request)
+      ? new Request(new URL("/index-20260803-121.txt", url.origin), request)
       : request;
     const assetResponse = await env.ASSETS.fetch(assetRequest);
     if (url.pathname === "/" || ["/admin/", "/admin/index.html", "/admin.html"].includes(url.pathname)) {
