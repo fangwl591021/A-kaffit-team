@@ -2618,8 +2618,11 @@ async function app(request, env, ctx) {
   }
 
   if (env.ASSETS) {
-    const assetResponse = await env.ASSETS.fetch(request);
-    if (["/admin/", "/admin/index.html", "/admin.html"].includes(url.pathname)) {
+    const assetRequest = url.pathname === "/"
+      ? new Request(new URL("/index-20260803-120.html", url.origin), request)
+      : request;
+    const assetResponse = await env.ASSETS.fetch(assetRequest);
+    if (url.pathname === "/" || ["/admin/", "/admin/index.html", "/admin.html"].includes(url.pathname)) {
       const headers = new Headers(assetResponse.headers);
       headers.set("cache-control", "no-store, no-cache, must-revalidate");
       headers.set("pragma", "no-cache");
