@@ -38,6 +38,7 @@ test('entry page clearly separates member login from new registration',()=>{
 test('LIFF entry automatically resumes LINE Login after session recovery',()=>{
   const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
   assert.match(app,/function shouldAutoStartLineLogin\(\)/);
+  assert.match(app,/state\.publicCard \|\| state\.sharedContact\) return false/);
   assert.match(app,/window\.liff\?\.isInClient\?\.\(\)/);
   assert.match(app,/if \(shouldAutoStartLineLogin\(\)\) await startLogin\(\)/);
 });

@@ -2716,7 +2716,7 @@ async function app(request, env, ctx) {
 
   if (env.ASSETS) {
     const assetRequest = url.pathname === "/"
-      ? new Request(new URL("/index-20260803-122.txt", url.origin), request)
+      ? new Request(new URL("/index-20260803-123.txt", url.origin), request)
       : request;
     const assetResponse = await env.ASSETS.fetch(assetRequest);
     if (url.pathname === "/" || ["/admin/", "/admin/index.html", "/admin.html"].includes(url.pathname)) {
