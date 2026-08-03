@@ -17,10 +17,14 @@ test("official A’kaffit homepage is streamed through a fixed-origin privacy-fi
   assert.match(worker, /mailto:\|tel:/);
   assert.match(worker, /url\.pathname === "\/akaffit-official"/);
   assert.match(worker, /\/akaffit-official-runtime/);
+  assert.match(worker, /\/akaffit-official-slick\.js/);
+  assert.match(worker, /\/akaffit-official-slick\.css/);
   assert.match(worker, /\/akaffit-official-slick-theme\.css/);
   assert.match(worker, /\/akaffit-official-font\/slick\.woff/);
   assert.match(worker, /access-control-allow-origin/);
   assert.match(worker, /replaceAll\("\.\/fonts\/slick\.woff"/);
   assert.match(config, /"\/akaffit-official"/);
+  assert.match(config, /"\/akaffit-official-slick\.js"/);
+  assert.match(config, /"\/akaffit-official-slick\.css"/);
   assert.match(config, /"\/akaffit-official-font\/\*"/);
 });

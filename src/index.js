@@ -576,6 +576,8 @@ async function akaffitYoutubeVideos() {
 const AKAFFIT_OFFICIAL_URL = "https://www.akaffit.com/";
 const AKAFFIT_OFFICIAL_ASSETS = Object.freeze({
   runtime: "https://www.akaffit.com/script/script.js",
+  slick: "https://www.akaffit.com/slick/slick.min.js",
+  core: "https://www.akaffit.com/slick/slick.css",
   theme: "https://www.akaffit.com/slick/slick-theme.css",
   woff: "https://www.akaffit.com/slick/fonts/slick.woff",
   ttf: "https://www.akaffit.com/slick/fonts/slick.ttf",
@@ -594,6 +596,8 @@ async function officialAkaffitAsset(kind) {
   if (!upstream.ok || !upstream.body) return new Response("Official asset unavailable", { status: 502 });
   const contentTypes = {
     runtime: "application/javascript; charset=utf-8",
+    slick: "application/javascript; charset=utf-8",
+    core: "text/css; charset=utf-8",
     theme: "text/css; charset=utf-8",
     woff: "font/woff",
     ttf: "font/ttf",
@@ -666,6 +670,8 @@ async function officialAkaffitSite() {
         try {
           if (new URL(src, AKAFFIT_OFFICIAL_URL).pathname === "/script/script.js") {
             element.setAttribute("src", "/akaffit-official-runtime");
+          } else if (new URL(src, AKAFFIT_OFFICIAL_URL).pathname === "/slick/slick.min.js") {
+            element.setAttribute("src", "/akaffit-official-slick.js");
           }
         } catch { /* keep malformed upstream URL untouched */ }
       },
@@ -674,7 +680,10 @@ async function officialAkaffitSite() {
       element(element) {
         const href = element.getAttribute("href") || "";
         try {
-          if (new URL(href, AKAFFIT_OFFICIAL_URL).pathname === "/slick/slick-theme.css") {
+          const pathname = new URL(href, AKAFFIT_OFFICIAL_URL).pathname;
+          if (pathname === "/slick/slick.css") {
+            element.setAttribute("href", "/akaffit-official-slick.css");
+          } else if (pathname === "/slick/slick-theme.css") {
             element.setAttribute("href", "/akaffit-official-slick-theme.css");
           }
         } catch { /* keep malformed upstream URL untouched */ }
@@ -737,6 +746,12 @@ async function app(request, env, ctx) {
   }
   if (request.method === "GET" && url.pathname === "/akaffit-official-runtime") {
     return officialAkaffitAsset("runtime");
+  }
+  if (request.method === "GET" && url.pathname === "/akaffit-official-slick.js") {
+    return officialAkaffitAsset("slick");
+  }
+  if (request.method === "GET" && url.pathname === "/akaffit-official-slick.css") {
+    return officialAkaffitAsset("core");
   }
   if (request.method === "GET" && url.pathname === "/akaffit-official-slick-theme.css") {
     return officialAkaffitAsset("theme");
