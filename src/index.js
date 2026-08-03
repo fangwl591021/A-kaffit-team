@@ -2619,11 +2619,12 @@ async function app(request, env, ctx) {
 
   if (env.ASSETS) {
     const assetRequest = url.pathname === "/"
-      ? new Request(new URL("/index-20260803-120.html", url.origin), request)
+      ? new Request(new URL("/index-20260803-120.txt", url.origin), request)
       : request;
     const assetResponse = await env.ASSETS.fetch(assetRequest);
     if (url.pathname === "/" || ["/admin/", "/admin/index.html", "/admin.html"].includes(url.pathname)) {
       const headers = new Headers(assetResponse.headers);
+      if (url.pathname === "/") headers.set("content-type", "text/html; charset=utf-8");
       headers.set("cache-control", "no-store, no-cache, must-revalidate");
       headers.set("pragma", "no-cache");
       headers.set("expires", "0");

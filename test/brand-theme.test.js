@@ -37,7 +37,7 @@ test("public site uses the coffee-inspired A-kaffit rust theme", () => {
   assert.match(html, /\/styles\.css\?v=20260731-69/);
   assert.match(html, /\/akaffit-20260801-41\.css/);
   assert.match(html, /\/app-20260803-120\.js/);
-  assert.match(worker, /\/index-20260803-120\.html/);
+  assert.match(worker, /\/index-20260803-120\.txt/);
   assert.match(adminHtml, /圖片請使用 2:3 直式，建議 800 × 1200 px/);
   assert.match(adminHtml, /2:3 等比預覽｜建議 800 × 1200 px/);
   assert.match(adminRouteHtml, /圖片請使用 2:3 直式，建議 800 × 1200 px/);
