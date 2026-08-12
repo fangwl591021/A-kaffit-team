@@ -96,18 +96,13 @@ test("LIFF entry parsing preserves direct invite and liff.state invite parameter
   const app = source("public/app.js");
   assert.match(app, /if \(params\.get\("invite"\)\) return params\.get\("invite"\)/);
   assert.match(app, /new URL\(liffState, location\.origin\)\.searchParams\.get\("invite"\)/);
-  assert.match(app, /if\(state\.invite&&!\(await ensureInviteFriendship\(\)\)\)return/);
+  assert.match(app, /inviteToken: state\.invite/);
 });
 
-test("invited members are sent to the A-KAFFIT official account", () => {
+test("invited members use LINE Login without a friendship gate", () => {
   const app = source("public/app.js");
-  const worker = source("src/index.js");
-  const gateStart = app.indexOf("function renderInviteFriendGate");
-  const gateEnd = app.indexOf("async function startLogin", gateStart);
-  const gate = app.slice(gateStart, gateEnd);
-  assert.match(gate, /加入 A-KAFFIT 後繼續/);
-  assert.match(gate, /https:\/\/line\.me\/R\/ti\/p\/@307bxlka/);
-  assert.match(gate, /openWindow\(\{url:officialAccountUrl,external:false\}\)/);
-  assert.doesNotMatch(gate, /康立智能|requestFriendship/);
-  assert.match(worker, /officialAccountUrl: "https:\/\/line\.me\/R\/ti\/p\/@307bxlka"/);
+  assert.doesNotMatch(app, /ensureInviteFriendship|renderInviteFriendGate|getFriendship|requestKlinkFriend|retryKlinkFriend/);
+  assert.doesNotMatch(app, /加入好友並使用 LINE 登入|加入 A-KAFFIT 後繼續|已確認加入 A-KAFFIT 官方帳號/);
+  assert.match(app, /<button class="btn" id="login"[^>]*>使用 LINE 登入<\/button>/);
+  assert.match(app, /LINE 登入成功\\n推薦關係已確立/);
 });
