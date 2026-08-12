@@ -2829,13 +2829,12 @@ function profileFormMarkup(required = false) {
     : `<span id="memberLogoPreview">${esc((state.member.displayName || "會").slice(0,1))}</span>`;
   return `<div class="card profile-card member-registration-card">
     <h2 id="profileDialogTitle">${required ? "完成會員註冊" : "會員註冊資料"}</h2>
-    <p class="muted">手機與生日是登入驗證資料；其餘內容可在這裡補齊或更新。</p>
+    <p class="muted">請補齊基本資料，完成後即可使用會員中心。</p>
     <div class="member-logo-upload"><div class="member-logo-preview">${logo}</div><div><strong>Logo 圖片</strong><label class="btn alt member-logo-button">選擇圖片<input id="memberLogoFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label><small>JPEG、PNG、WebP，最大 3MB</small></div></div>
     <label>顯示名稱</label><input id="displayName" value="${esc(state.member.displayName || "")}" maxlength="120" required>
     <label>姓名</label><input id="fullName" value="${esc(state.member.fullName || "")}" maxlength="120" autocomplete="name" required>
     <label>生日密碼（民國年月日）</label><input id="birthday" type="text" inputmode="numeric" value="${esc(birthdayPassword(state.member.birthday))}" placeholder="例如 591021、390305" pattern="[0-9]{6,7}" maxlength="7" required>
     <label>性別</label><select id="gender" required><option value="">請選擇</option><option value="female" ${state.member.gender === "female" ? "selected" : ""}>女性</option><option value="male" ${state.member.gender === "male" ? "selected" : ""}>男性</option><option value="other" ${state.member.gender === "other" ? "selected" : ""}>其他</option><option value="prefer_not_to_say" ${state.member.gender === "prefer_not_to_say" ? "selected" : ""}>不透露</option></select>
-    <label>驗證手機</label><input value="${esc(state.member.phone || "")}" readonly>
     <div class="member-social-heading"><label>社群連結</label><button type="button" id="addSocialLink">＋ 新增</button></div>
     <div id="memberSocialLinks" class="member-social-list">${links.map(socialLinkRow).join("")}</div>
     <p class="member-registration-number">系統會員編號：${esc(state.member.memberNumber || "建立中")}</p>

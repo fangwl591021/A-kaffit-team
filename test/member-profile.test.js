@@ -23,6 +23,9 @@ test("member registration UI includes logo, name, numeric birthday, and repeatab
   assert.match(app, /591021、390305/);
   assert.match(app, /id="addSocialLink"/);
   assert.match(app, /socialLinks/);
+  assert.match(app, /請補齊基本資料，完成後即可使用會員中心。/);
+  assert.doesNotMatch(app, /驗證手機/);
+  assert.doesNotMatch(app, /手機與生日是登入驗證資料/);
   assert.doesNotMatch(app, /class="ak-brandmark"/);
   const css = fs.readFileSync(new URL("../public/akaffit.css", import.meta.url), "utf8");
   assert.match(css, /\.member-logo-preview\{[^}]*border-radius:50%[^}]*background:var\(--ak-soft\)[^}]*color:var\(--ak-primary\)/);
