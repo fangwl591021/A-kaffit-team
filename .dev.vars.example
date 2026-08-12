@@ -1,8 +1,11 @@
 # Copy to .dev.vars for local development. Never commit .dev.vars.
-LINE_LOGIN_CHANNEL_ID=2007221311
+LINE_LOGIN_CHANNEL_ID=2005868456
 # Public LIFF ID used by the browser. This is not a secret.
-LIFF_ID=2010925044-KXzQzB5r
-CHECKIN_LIFF_ID=2010925044-KXzQzB5r
+LIFF_ID=2005868456-3Ip8H1Bx
+CARD_SHARE_LIFF_ID=2005868456-3Ip8H1Bx
+CHECKIN_LIFF_ID=2005868456-3Ip8H1Bx
+APP_BASE_URL=https://tdea-design.fangwl591021.workers.dev
+LIFF_URL=https://liff.line.me/2005868456-3Ip8H1Bx
 SESSION_SIGNING_SECRET=replace-with-a-long-random-secret
 # Optional comma-separated LINE Login subjects permitted to use /v1/admin routes.
 ADMIN_LINE_SUBJECTS=
