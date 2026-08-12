@@ -93,6 +93,12 @@ test("exclusive share does not force LIFF login for phone-birthday members", () 
   );
   assert.doesNotMatch(copyInviteSource, /liff\.login|markLiffLoginPending/);
   assert.match(copyInviteSource, /canUseLinePicker/);
+  assert.match(copyInviteSource, /liff\.isInClient/);
+  assert.match(copyInviteSource, /location\.replace\(lineInviteShareUrl\(shareText\)\)/);
   assert.match(copyInviteSource, /navigator\.share/);
   assert.match(copyInviteSource, /navigator\.clipboard\.writeText/);
+});
+
+test("exclusive share uses LINE's official share route as its in-app fallback", () => {
+  assert.match(app, /function lineInviteShareUrl\(text\)[\s\S]*https:\/\/line\.me\/R\/share\?text=/);
 });
