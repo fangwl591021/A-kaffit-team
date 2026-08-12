@@ -898,7 +898,7 @@ async function app(request, env, ctx) {
       checkinLiffId: env.CHECKIN_LIFF_ID || "",
       buildVersion: "20260722-mlm-ai-2",
       cardAiProvider: env.MLM_WORKER ? "mlm-service" : "local-fallback",
-      officialAccountUrl: "https://lin.ee/sV9xDLr",
+      officialAccountUrl: "https://line.me/R/ti/p/@307bxlka",
     });
   }
 

@@ -289,7 +289,7 @@ async function login() {
   const invitedReferrer = state.invite ? r.member?.systemReferrer : null;
   if(state.invite){
     const referrerLabel=invitedReferrer?.displayName||invitedReferrer?.memberNumber||"";
-    setTimeout(()=>alert(referrerLabel?`已確認加入康立智能好友\n推薦關係已確立：${referrerLabel}`:"已確認加入康立智能好友，但這組邀請碼未建立新的推薦關係。"),0);
+    setTimeout(()=>alert(referrerLabel?`已確認加入 A-KAFFIT 官方帳號\n推薦關係已確立：${referrerLabel}`:"已確認加入 A-KAFFIT 官方帳號，但這組邀請碼未建立新的推薦關係。"),0);
   }
   sessionStorage.removeItem("klinkweb_invite");
   // 驗證完成後必須同步清除記憶體中的邀請狀態；否則 render() 會判定為
@@ -300,21 +300,23 @@ async function login() {
   history.replaceState({}, "", state.tab === "daily" ? `${location.pathname}?tab=daily` : location.pathname);
   await render();
 }
-function renderInviteFriendGate(message="請先加入康立智能好友，系統才會完成推薦關係綁定。"){
-  $("#app").innerHTML=`<section class="invite-friend-gate"><div class="invite-friend-gate-icon">＋</div><h2>加入康立智能後繼續</h2><p>${esc(message)}</p><button class="btn" id="requestKlinkFriend">加入好友並繼續</button><button class="btn alt" id="retryKlinkFriend">我已加入，重新檢查</button><small>加入好友後會留在目前流程，不會進入官方帳號聊天室。</small></section>`;
+function renderInviteFriendGate(message="請先加入 A-KAFFIT 官方帳號，系統才會完成推薦關係綁定。"){
+  $("#app").innerHTML=`<section class="invite-friend-gate"><div class="invite-friend-gate-icon">＋</div><h2>加入 A-KAFFIT 後繼續</h2><p>${esc(message)}</p><button class="btn" id="requestKlinkFriend">前往加入 A-KAFFIT 好友</button><button class="btn alt" id="retryKlinkFriend">我已加入，重新檢查</button><small>加入完成後請返回此頁，按「我已加入，重新檢查」。</small></section>`;
   $("#requestKlinkFriend").onclick=async()=>{
     const button=$("#requestKlinkFriend");
     await withActionFeedback(button,async()=>{
-      try{if(typeof liff.requestFriendship==="function")await liff.requestFriendship();}catch(error){console.warn("LIFF requestFriendship failed",error);}
-      if(await ensureInviteFriendship(false))return login();
-      throw new Error("尚未確認加入康立智能好友，請完成 LINE 加好友提示後再試一次。");
-    },{busy:"好友確認中…",success:"已確認"}).catch((error)=>alert(error.message));
+      const officialAccountUrl=state.config?.officialAccountUrl||"https://line.me/R/ti/p/@307bxlka";
+      try{
+        if(window.liff?.isInClient?.())window.liff.openWindow({url:officialAccountUrl,external:false});
+        else window.location.href=officialAccountUrl;
+      }catch{window.location.href=officialAccountUrl;}
+    },{busy:"正在開啟…",success:"已開啟"}).catch((error)=>alert(error.message));
   };
   $("#retryKlinkFriend").onclick=async()=>{
     const button=$("#retryKlinkFriend");
     await withActionFeedback(button,async()=>{
       if(await ensureInviteFriendship(false))return login();
-      throw new Error("目前仍未確認為康立智能好友。");
+      throw new Error("目前仍未確認為 A-KAFFIT 官方帳號好友。");
     },{busy:"重新檢查中…",success:"已確認"}).catch((error)=>alert(error.message));
   };
 }
@@ -332,7 +334,7 @@ async function ensureInviteFriendship(renderOnFail=true){
     return false;
   }catch(error){
     console.warn("Klink invitation friendship check failed",error);
-    if(renderOnFail)renderInviteFriendGate("好友狀態確認失敗，請確認此 LIFF 已連結康立智能官方帳號後再試一次。");
+    if(renderOnFail)renderInviteFriendGate("好友狀態確認失敗，請確認此 LIFF 已連結 A-KAFFIT 官方帳號後再試一次。");
     return false;
   }
 }
@@ -2296,12 +2298,12 @@ function lineGeneratedCardExample() {
   ].join("\n");
   const buttons = [
     { label:"粉絲專頁", type:"url", value:"https://facebook.com/qr?id=61565353201161", color:"#B95121", enabled:true },
-    { label:"加LINE好友", type:"line", value:"https://page.line.me/akaffit", color:"#06C755", enabled:true },
+    { label:"加LINE好友", type:"line", value:"https://line.me/R/ti/p/@307bxlka", color:"#06C755", enabled:true },
     { label:"官方網站", type:"url", value:"https://www.akaffit.com/index", color:"#713015", enabled:true },
   ];
   return {
     serviceDescription:description,
-    lineUrl:"https://page.line.me/akaffit",
+    lineUrl:"https://line.me/R/ti/p/@307bxlka",
     websiteUrl:"https://www.akaffit.com/index",
     selectedVersion:"standard",
     versions:{
