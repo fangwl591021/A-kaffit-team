@@ -17,7 +17,8 @@
 
 - Worker：`akaffit-team`
 - 正式網址：`https://akaffit-team.fangwl591021.workers.dev/`
-- LIFF ID：`2007221311-QPueR5eF`
+- 會員中心 LIFF ID：`2010925044-KXzQzB5r`
+- 名片分享 LIFF ID：`2010925044-hPtKkoKO`
 - LINE Login Channel ID：`2007221311`
 - D1：`akaffit_team_crm`（建立後需將 ID 寫入 `wrangler.jsonc`）
 - R2：`akaffit-team-media`
