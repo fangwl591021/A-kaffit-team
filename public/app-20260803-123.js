@@ -1421,8 +1421,21 @@ async function showShareQr() {
     alert(error.message || "分享 QR 碼產生失敗");
   }
 }
-function lineInviteShareUrl(text) {
-  return `https://line.me/R/share?text=${encodeURIComponent(text)}`;
+async function copyInviteUrl(url) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(url);
+    return;
+  }
+  const input = document.createElement("textarea");
+  input.value = url;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.select();
+  const copied = document.execCommand("copy");
+  input.remove();
+  if (!copied) throw new Error("推薦網址複製失敗");
 }
 async function copyInvite() {
   try {
@@ -1442,21 +1455,28 @@ async function copyInvite() {
     if (canUseLinePicker) {
       try {
         const shared = await liff.shareTargetPicker([{ type:"text", text:shareText }]);
-        if (shared !== false) alert("推薦網址已分享");
+        // LINE 官方文件提醒：部分裝置在 shareTargetPicker 的回呼內使用
+        // alert() 會讓 LIFF 畫面異常，因此成功或取消都直接返回原頁。
+        return;
+      } catch (error) {
+        if (/cancel|abort/i.test(String(error?.message || ""))) return;
+        console.warn("LINE shareTargetPicker failed", error);
+      }
+    }
+    if (isLineEnvironment) {
+      await copyInviteUrl(url);
+      alert("LINE 好友選擇器目前無法使用，推薦網址已複製；請貼到好友聊天室分享。");
+      return;
+    }
+    if (navigator.share) {
+      try {
+        await navigator.share({ title:"A’kaffit 專屬分享", text:"邀請你加入 A’kaffit", url });
         return;
       } catch (error) {
         if (/cancel|abort/i.test(String(error?.message || ""))) return;
       }
     }
-    if (isLineEnvironment) {
-      location.replace(lineInviteShareUrl(shareText));
-      return;
-    }
-    if (navigator.share) {
-      await navigator.share({ title:"A’kaffit 專屬分享", text:"邀請你加入 A’kaffit", url });
-      return;
-    }
-    await navigator.clipboard.writeText(url);
+    await copyInviteUrl(url);
     alert("推薦網址已複製");
   } catch (error) {
     if (!/cancel|abort/i.test(String(error?.message || ""))) alert(error.message || "推薦網址分享失敗");

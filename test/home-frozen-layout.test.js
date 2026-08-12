@@ -94,11 +94,18 @@ test("exclusive share does not force LIFF login for phone-birthday members", () 
   assert.doesNotMatch(copyInviteSource, /liff\.login|markLiffLoginPending/);
   assert.match(copyInviteSource, /canUseLinePicker/);
   assert.match(copyInviteSource, /liff\.isInClient/);
-  assert.match(copyInviteSource, /location\.replace\(lineInviteShareUrl\(shareText\)\)/);
+  assert.doesNotMatch(copyInviteSource, /line\.me\/R\/share|location\.replace/);
+  assert.match(copyInviteSource, /await copyInviteUrl\(url\)/);
   assert.match(copyInviteSource, /navigator\.share/);
-  assert.match(copyInviteSource, /navigator\.clipboard\.writeText/);
+  assert.match(app, /async function copyInviteUrl\(url\)[\s\S]*navigator\.clipboard/);
 });
 
-test("exclusive share uses LINE's official share route as its in-app fallback", () => {
-  assert.match(app, /function lineInviteShareUrl\(text\)[\s\S]*https:\/\/line\.me\/R\/share\?text=/);
+test("exclusive share never navigates the mobile LINE client to a blank share page", () => {
+  const copyInviteSource = app.slice(
+    app.indexOf("async function copyInviteUrl("),
+    app.indexOf("async function showWalletQr("),
+  );
+  assert.doesNotMatch(copyInviteSource, /function lineInviteShareUrl|https:\/\/line\.me\/R\/share\?text=|location\.replace/);
+  assert.match(app, /LINE 好友選擇器目前無法使用，推薦網址已複製/);
+  assert.doesNotMatch(app, /if \(shared !== false\) alert\("推薦網址已分享"\)/);
 });
