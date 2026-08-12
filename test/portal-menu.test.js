@@ -28,7 +28,9 @@ test("內頁功能列移除星座、AI 任務與返回首頁，返回首頁固�
   const layout = app.slice(layoutStart, layoutEnd);
   assert.ok(layout.includes('class="feature-header-actions"'));
   assert.ok(layout.includes('class="feature-header-action feature-home-action" data-home-action="home"'));
-  assert.ok(layout.includes('const headerActions = `<div class="feature-header-actions">${cardCollectionAction}${homeAction}</div>`'));
+  assert.ok(layout.includes('const headerActions = `<div class="feature-header-actions">${homeAction}</div>`'));
+  assert.ok(!layout.includes('cardCollectionAction'));
+  assert.ok(!layout.includes('data-home-action="cardCollection"'));
   assert.ok(layout.includes('aria-label="返回首頁"'));
   assert.equal((app.match(/data-home-action="home"/g) || []).length, 1);
   assert.ok(!app.includes('class="back-card" data-home-action="home"'));
