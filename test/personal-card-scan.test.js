@@ -33,7 +33,7 @@ test("LINE-created cards start with the A-kaffit branded example", () => {
   assert.match(app, /純淨低敏｜零負擔咖啡・自在安心喝/);
   assert.match(app, /大師把關｜SCA認證精品豆・大濾掛/);
   assert.match(app, /粉絲專頁[\s\S]*facebook\.com\/qr\?id=61565353201161/);
-  assert.match(app, /加LINE好友[\s\S]*page\.line\.me\/akaffit/);
+  assert.match(app, /加LINE好友[\s\S]*line\.me\/R\/ti\/p\/@307bxlka/);
   assert.match(app, /官方網站[\s\S]*www\.akaffit\.com\/index/);
   assert.match(app, /body:JSON\.stringify\(lineGeneratedCardExample\(\)\)/);
   assert.match(cards, /buttonDefaultsSeeded\s*\? storedButtons\.slice\(0, 4\)/);
