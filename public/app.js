@@ -259,7 +259,7 @@ async function login() {
         const button = $("#login");
         if (button) {
           button.disabled = false;
-          button.textContent = state.invite ? "加入好友並使用 LINE 登入" : "使用 LINE 登入";
+          button.textContent = "使用 LINE 登入";
         }
         const status = $("#loginStatus");
         if (status) status.textContent = "尚未開啟 LINE 授權，請再試一次。";
@@ -268,7 +268,6 @@ async function login() {
     return;
   }
   clearLiffLoginPending();
-  if(state.invite&&!(await ensureInviteFriendship()))return;
   const status = $("#loginStatus");
   if (status) status.textContent = "LINE 身份已確認，正在建立會員資料…";
   const idToken = liff.getIDToken();
@@ -289,7 +288,7 @@ async function login() {
   const invitedReferrer = state.invite ? r.member?.systemReferrer : null;
   if(state.invite){
     const referrerLabel=invitedReferrer?.displayName||invitedReferrer?.memberNumber||"";
-    setTimeout(()=>alert(referrerLabel?`已確認加入 A-KAFFIT 官方帳號\n推薦關係已確立：${referrerLabel}`:"已確認加入 A-KAFFIT 官方帳號，但這組邀請碼未建立新的推薦關係。"),0);
+    setTimeout(()=>alert(referrerLabel?`LINE 登入成功\n推薦關係已確立：${referrerLabel}`:"LINE 登入成功，但這組邀請碼未建立新的推薦關係。"),0);
   }
   sessionStorage.removeItem("klinkweb_invite");
   // 驗證完成後必須同步清除記憶體中的邀請狀態；否則 render() 會判定為
@@ -299,44 +298,6 @@ async function login() {
   if (state.courseSession) state.tab = "courses";
   history.replaceState({}, "", state.tab === "daily" ? `${location.pathname}?tab=daily` : location.pathname);
   await render();
-}
-function renderInviteFriendGate(message="請先加入 A-KAFFIT 官方帳號，系統才會完成推薦關係綁定。"){
-  $("#app").innerHTML=`<section class="invite-friend-gate"><div class="invite-friend-gate-icon">＋</div><h2>加入 A-KAFFIT 後繼續</h2><p>${esc(message)}</p><button class="btn" id="requestKlinkFriend">前往加入 A-KAFFIT 好友</button><button class="btn alt" id="retryKlinkFriend">我已加入，重新檢查</button><small>加入完成後請返回此頁，按「我已加入，重新檢查」。</small></section>`;
-  $("#requestKlinkFriend").onclick=async()=>{
-    const button=$("#requestKlinkFriend");
-    await withActionFeedback(button,async()=>{
-      const officialAccountUrl=state.config?.officialAccountUrl||"https://line.me/R/ti/p/@307bxlka";
-      try{
-        if(window.liff?.isInClient?.())window.liff.openWindow({url:officialAccountUrl,external:false});
-        else window.location.href=officialAccountUrl;
-      }catch{window.location.href=officialAccountUrl;}
-    },{busy:"正在開啟…",success:"已開啟"}).catch((error)=>alert(error.message));
-  };
-  $("#retryKlinkFriend").onclick=async()=>{
-    const button=$("#retryKlinkFriend");
-    await withActionFeedback(button,async()=>{
-      if(await ensureInviteFriendship(false))return login();
-      throw new Error("目前仍未確認為 A-KAFFIT 官方帳號好友。");
-    },{busy:"重新檢查中…",success:"已確認"}).catch((error)=>alert(error.message));
-  };
-}
-async function ensureInviteFriendship(renderOnFail=true){
-  try{
-    await initLiffOnce();
-    if(!liff.isLoggedIn())return false;
-    if(typeof liff.getFriendship!=="function"){
-      if(renderOnFail)renderInviteFriendGate("目前的 LINE 環境無法確認好友狀態，請從 LINE 重新開啟此邀請。");
-      return false;
-    }
-    const friendship=await liff.getFriendship();
-    if(friendship?.friendFlag)return true;
-    if(renderOnFail)renderInviteFriendGate();
-    return false;
-  }catch(error){
-    console.warn("Klink invitation friendship check failed",error);
-    if(renderOnFail)renderInviteFriendGate("好友狀態確認失敗，請確認此 LIFF 已連結 A-KAFFIT 官方帳號後再試一次。");
-    return false;
-  }
 }
 async function startLogin() {
   if (loginInProgress) return;
@@ -355,7 +316,7 @@ async function startLogin() {
     loginInProgress = false;
     if (button) {
       button.disabled = false;
-      button.textContent = state.invite ? "加入好友並使用 LINE 登入" : "使用 LINE 登入";
+      button.textContent = "使用 LINE 登入";
     }
     if (status) status.textContent = "登入未完成，請重新嘗試。";
     alert(error.message || "LINE 登入失敗");
@@ -387,7 +348,7 @@ async function submitPhoneBirthdayAuth() {
 async function renderLogin() {
   const isLogin = phoneAuthMode === "login";
   const lineReady = Boolean(state.config?.liffId);
-  $("#app").innerHTML = `<section class="ak-register"><div class="ak-register-wordmark">A-KAFFIT TEAM</div><h1>使用 LINE 登入</h1><p>以你的 LINE 身分安全登入；第一次使用會建立會員資料，之後會直接回到原帳號。</p><button class="btn" id="login" ${lineReady ? "" : "disabled"}>${state.invite ? "加入好友並使用 LINE 登入" : "使用 LINE 登入"}</button><div class="ak-auth-mode-note" id="loginStatus">${lineReady ? "將使用 LINE 授權確認身分，不需要另外設定密碼。" : "LINE Login 尚未設定，請使用下方備援登入。"}</div><details class="ak-auth-fallback"><summary>其他登入方式：手機＋生日</summary><div class="ak-auth-tabs" role="tablist" aria-label="會員登入與註冊"><button type="button" role="tab" aria-selected="${isLogin}" class="${isLogin ? "active" : ""}" data-phone-auth-mode="login">會員登入</button><button type="button" role="tab" aria-selected="${!isLogin}" class="${!isLogin ? "active" : ""}" data-phone-auth-mode="register">新會員註冊</button></div><div class="ak-auth-mode-note">${isLogin ? "輸入已註冊的手機與生日密碼。" : "確認尚未註冊後，再建立新的會員資料。"}</div><label>手機<input id="registerPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0912345678" maxlength="20"></label><label>生日密碼（民國年月日）<input id="registerBirthday" type="text" inputmode="numeric" autocomplete="bday" placeholder="例如 591021、390305" pattern="[0-9]{6,7}" maxlength="7"></label><button class="btn alt" id="phoneAuthSubmit">${isLogin ? "登入會員中心" : "建立新會員"}</button><em>${isLogin ? "查無會員時，系統不會自動建立帳號。" : "已註冊的手機與生日不會再次建立帳號。"}</em></details></section>`;
+  $("#app").innerHTML = `<section class="ak-register"><div class="ak-register-wordmark">A-KAFFIT TEAM</div><h1>使用 LINE 登入</h1><p>以你的 LINE 身分安全登入；第一次使用會建立會員資料，之後會直接回到原帳號。</p><button class="btn" id="login" ${lineReady ? "" : "disabled"}>使用 LINE 登入</button><div class="ak-auth-mode-note" id="loginStatus">${lineReady ? "將使用 LINE 授權確認身分，不需要另外設定密碼。" : "LINE Login 尚未設定，請使用下方備援登入。"}</div><details class="ak-auth-fallback"><summary>其他登入方式：手機＋生日</summary><div class="ak-auth-tabs" role="tablist" aria-label="會員登入與註冊"><button type="button" role="tab" aria-selected="${isLogin}" class="${isLogin ? "active" : ""}" data-phone-auth-mode="login">會員登入</button><button type="button" role="tab" aria-selected="${!isLogin}" class="${!isLogin ? "active" : ""}" data-phone-auth-mode="register">新會員註冊</button></div><div class="ak-auth-mode-note">${isLogin ? "輸入已註冊的手機與生日密碼。" : "確認尚未註冊後，再建立新的會員資料。"}</div><label>手機<input id="registerPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0912345678" maxlength="20"></label><label>生日密碼（民國年月日）<input id="registerBirthday" type="text" inputmode="numeric" autocomplete="bday" placeholder="例如 591021、390305" pattern="[0-9]{6,7}" maxlength="7"></label><button class="btn alt" id="phoneAuthSubmit">${isLogin ? "登入會員中心" : "建立新會員"}</button><em>${isLogin ? "查無會員時，系統不會自動建立帳號。" : "已註冊的手機與生日不會再次建立帳號。"}</em></details></section>`;
   if (lineReady) $("#login").onclick = startLogin;
   document.querySelectorAll("[data-phone-auth-mode]").forEach((tab)=>tab.onclick=()=>{phoneAuthMode=tab.dataset.phoneAuthMode === "register" ? "register" : "login";renderLogin();});
   $("#phoneAuthSubmit").onclick = submitPhoneBirthdayAuth;
