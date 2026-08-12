@@ -9,9 +9,9 @@
     "run_worker_first": ["/", "/api/*", "/v1/*", "/i/*", "/w/*", "/c/*", "/r/*", "/akaffit-official", "/akaffit-official-runtime", "/akaffit-official-slick.js", "/akaffit-official-slick.css", "/akaffit-official-slick-theme.css", "/akaffit-official-font/*", "/admin", "/admin/*", "/admin.html", "/assets/checkin-template/*"]
   },
   "vars": {
-    "LIFF_ID": "2007221311-QPueR5eF",
+    "LIFF_ID": "2010925044-KXzQzB5r",
     "CARD_SHARE_LIFF_ID": "2010925044-hPtKkoKO",
-    "CHECKIN_LIFF_ID": "2007221311-QPueR5eF",
+    "CHECKIN_LIFF_ID": "2010925044-KXzQzB5r",
     "LINE_LOGIN_CHANNEL_ID": "2007221311"
   },
   "d1_databases": [
