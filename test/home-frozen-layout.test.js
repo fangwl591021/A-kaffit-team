@@ -94,6 +94,8 @@ test("exclusive share does not force LIFF login for phone-birthday members", () 
   assert.doesNotMatch(copyInviteSource, /liff\.login|markLiffLoginPending/);
   assert.match(copyInviteSource, /canUseLinePicker/);
   assert.match(copyInviteSource, /liff\.isInClient/);
+  assert.match(copyInviteSource, /location\.assign\(dedicatedPickerUrl\)/);
+  assert.match(app, /function inviteSharePickerUrl\(inviteToken\)[\s\S]*cardShareLiffId[\s\S]*\/r\/invite-share/);
   assert.doesNotMatch(copyInviteSource, /line\.me\/R\/share|location\.replace/);
   assert.match(copyInviteSource, /await copyInviteUrl\(url\)/);
   assert.match(copyInviteSource, /navigator\.share/);

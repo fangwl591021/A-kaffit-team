@@ -1,4 +1,5 @@
 import { personalCardShareLiffHtml } from "./card-share-liff.js";
+import { inviteShareLiffHtml } from "./invite-share-liff.js";
 import {
   createSession,
   SESSION_MAX_AGE_SECONDS,
@@ -707,6 +708,27 @@ async function officialAkaffitSite() {
 
 async function app(request, env, ctx) {
   const url = new URL(request.url);
+  let inviteShareToken = "";
+  if (request.method === "GET" && url.pathname === "/r/invite-share") {
+    inviteShareToken = String(url.searchParams.get("inviteToken") || "").trim();
+  } else if (request.method === "GET" && url.pathname === "/") {
+    const liffState = url.searchParams.get("liff.state");
+    if (liffState) {
+      try {
+        const stateUrl = new URL(liffState, url.origin);
+        if (stateUrl.pathname === "/r/invite-share") {
+          inviteShareToken = String(stateUrl.searchParams.get("inviteToken") || "").trim();
+        }
+      } catch {
+        inviteShareToken = "";
+      }
+    }
+  }
+  if (inviteShareToken) {
+    if (!env.CARD_SHARE_LIFF_ID) return new Response("尚未設定分享 LIFF", { status: 503 });
+    if (!/^[A-Za-z0-9_-]{1,512}$/.test(inviteShareToken)) return new Response("推薦分享網址無效", { status: 400 });
+    return inviteShareLiffHtml({ liffId: env.CARD_SHARE_LIFF_ID, origin: url.origin, inviteToken: inviteShareToken });
+  }
   let cardShareId = "";
   if (request.method === "GET" && url.pathname === "/r/card-share") {
     cardShareId = String(url.searchParams.get("shareCardId") || "").trim();

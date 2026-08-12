@@ -1416,10 +1416,18 @@ async function showShareQr() {
     qr.innerHTML = "";
     new QRCode(qr, { text: r.invite.url, width: 210, height: 210 });
     qr.dataset.url = r.invite.url;
+    qr.dataset.token = r.invite.token;
     inviteUrl.textContent = r.invite.url;
   } catch (error) {
     alert(error.message || "分享 QR 碼產生失敗");
   }
+}
+function inviteSharePickerUrl(inviteToken) {
+  const liffId = state.config?.cardShareLiffId;
+  if (!liffId || !inviteToken) return "";
+  const url = new URL(`https://liff.line.me/${encodeURIComponent(liffId)}/r/invite-share`);
+  url.searchParams.set("inviteToken", inviteToken);
+  return url.toString();
 }
 async function copyInviteUrl(url) {
   if (navigator.clipboard?.writeText) {
@@ -1439,7 +1447,10 @@ async function copyInviteUrl(url) {
 }
 async function copyInvite() {
   try {
-    const url = $("#shareQr").dataset.url || (await invite()).invite.url;
+    const shareQr = $("#shareQr");
+    const generated = shareQr.dataset.url && shareQr.dataset.token ? null : await invite();
+    const url = shareQr.dataset.url || generated.invite.url;
+    const inviteToken = shareQr.dataset.token || generated.invite.token;
     const shareText = `A’kaffit 專屬分享\n${url}`;
     let canUseLinePicker = false;
     let isLineEnvironment = /Line\//i.test(navigator.userAgent || "");
@@ -1451,6 +1462,11 @@ async function copyInvite() {
       }
     } catch {
       canUseLinePicker = false;
+    }
+    const dedicatedPickerUrl = inviteSharePickerUrl(inviteToken);
+    if (isLineEnvironment && dedicatedPickerUrl) {
+      location.assign(dedicatedPickerUrl);
+      return;
     }
     if (canUseLinePicker) {
       try {
