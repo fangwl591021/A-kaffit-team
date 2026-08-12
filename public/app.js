@@ -1421,14 +1421,19 @@ async function showShareQr() {
     alert(error.message || "分享 QR 碼產生失敗");
   }
 }
+function lineInviteShareUrl(text) {
+  return `https://line.me/R/share?text=${encodeURIComponent(text)}`;
+}
 async function copyInvite() {
   try {
     const url = $("#shareQr").dataset.url || (await invite()).invite.url;
     const shareText = `A’kaffit 專屬分享\n${url}`;
     let canUseLinePicker = false;
+    let isLineEnvironment = /Line\//i.test(navigator.userAgent || "");
     try {
       if (window.liff && state.config?.liffId) {
         await initLiffOnce();
+        isLineEnvironment ||= Boolean(liff.isInClient?.());
         canUseLinePicker = liff.isLoggedIn() && liff.isApiAvailable?.("shareTargetPicker");
       }
     } catch {
@@ -1442,6 +1447,10 @@ async function copyInvite() {
       } catch (error) {
         if (/cancel|abort/i.test(String(error?.message || ""))) return;
       }
+    }
+    if (isLineEnvironment) {
+      location.replace(lineInviteShareUrl(shareText));
+      return;
     }
     if (navigator.share) {
       await navigator.share({ title:"A’kaffit 專屬分享", text:"邀請你加入 A’kaffit", url });
