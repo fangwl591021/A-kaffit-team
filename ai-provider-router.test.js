@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createAiProviderRouter } from "./src/ai-provider-router.js";
+
+const wrangler = readFileSync(new URL("./wrangler.jsonc", import.meta.url), "utf8");
 
 function usageDb(events) {
   return {
@@ -35,7 +38,7 @@ test("Gemini is primary and records one sanitized usage event", async () => {
   const response = await router.fetch("https://mlm.invalid/v1/responses", { body: JSON.stringify(requestBody()) });
   assert.equal(response.status, 200);
   assert.equal(calls.length, 1);
-  assert.match(calls[0].url, /generativelanguage\.googleapis\.com/);
+  assert.match(calls[0].url, /generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-3\.5-flash-lite:generateContent/);
   assert.equal(calls[0].init.headers["x-goog-api-key"], "gemini-secret");
   assert.equal(events.length, 1);
   assert.equal(events[0][4], "gemini");
@@ -43,6 +46,10 @@ test("Gemini is primary and records one sanitized usage event", async () => {
   assert.equal(events[0][12], 10);
   assert.equal(JSON.stringify(events).includes("private prompt"), false);
   assert.equal(JSON.stringify(events).includes("gemini-secret"), false);
+});
+
+test("Wrangler production config uses the same Gemini Flash-Lite model", () => {
+  assert.match(wrangler, /"GEMINI_MODEL": "gemini-3\.5-flash-lite"/);
 });
 
 test("OpenAI is used only after Gemini fails", async () => {

@@ -1,4 +1,4 @@
-const DEFAULT_GEMINI_MODEL="gemini-3.6-flash";
+const DEFAULT_GEMINI_MODEL="gemini-3.5-flash-lite";
 const DEFAULT_OPENAI_MODEL="gpt-5-mini";
 const clean=(value,max=160)=>String(value||"").trim().slice(0,max);
 const number=(value)=>Math.max(0,Number(value)||0);
