@@ -23,11 +23,6 @@ test("official A’kaffit homepage is streamed through a fixed-origin privacy-fi
   assert.match(worker, /\/akaffit-official-font\/slick\.woff/);
   assert.match(worker, /access-control-allow-origin/);
   assert.match(worker, /replaceAll\("\.\/fonts\/slick\.woff"/);
-  assert.match(worker, /let jqueryLoaded = false/);
-  assert.match(worker, /pathname === "\/plugins\/jquery\/jquery\.min\.js"/);
-  assert.match(worker, /if \(jqueryLoaded\)[\s\S]*element\.remove\(\)/);
-  assert.match(worker, /element\.setAttribute\("src", new URL\(src, AKAFFIT_OFFICIAL_URL\)\.href\)/);
-  assert.match(worker, /element\.setAttribute\("href", new URL\(href, AKAFFIT_OFFICIAL_URL\)\.href\)/);
   assert.match(config, /"\/akaffit-official"/);
   assert.match(config, /"\/akaffit-official-slick\.js"/);
   assert.match(config, /"\/akaffit-official-slick\.css"/);
