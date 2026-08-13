@@ -101,6 +101,12 @@ import {
   testOpenAIKey,
 } from "./openai-settings.js";
 import {
+  createAiProviderRouter,
+  getAiUsageReport,
+  getGeminiKeyStatus,
+  testGeminiConnection,
+} from "./ai-provider-router.js";
+import {
   getMemberCrmInsight,
   processMemberCrmInsight,
   queueMemberCrmInsight,
@@ -305,14 +311,22 @@ function officialTallLiffHtml(env, requestUrl) {
 </script></body></html>`, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 
-async function resolveCardAiProvider(env) {
-  if (env.MLM_WORKER) return env.MLM_WORKER;
-  return resolveOpenAIKey(env.DB, env.SESSION_SIGNING_SECRET, env.OPENAI_API_KEY);
+async function resolveCardAiProvider(env, userId = "") {
+  const openaiApiKey = await resolveOpenAIKey(env.DB, env.SESSION_SIGNING_SECRET, env.OPENAI_API_KEY);
+  return createAiProviderRouter({
+    db: env.DB,
+    userId,
+    geminiApiKey: env.GEMINI_API_KEY,
+    openaiApiKey,
+    geminiModel: env.GEMINI_MODEL,
+    openaiModel: env.OPENAI_FALLBACK_MODEL,
+    fallbackService: env.MLM_WORKER,
+  });
 }
 
 function scheduleCardImportPipeline(env, ctx, userId, eventId, provider = null) {
   const task=(async()=>{
-    const aiProvider=provider || await resolveCardAiProvider(env);
+    const aiProvider=provider || await resolveCardAiProvider(env,userId);
     if(!aiProvider)throw new Error('MLM AI 服務尚未連線');
     // 第一階段：只做 OCR、寫入收藏與防重判斷。
     const processed=await processImportInBackground(env.DB,env.MEDIA,userId,eventId,aiProvider,env.OPENAI_CARD_MODEL);
@@ -332,7 +346,7 @@ function scheduleCardImportPipeline(env, ctx, userId, eventId, provider = null) 
 
 function scheduleContactCrmInsights(env, ctx, userId, id) {
   const task=(async()=>{
-    const aiProvider=await resolveCardAiProvider(env);
+    const aiProvider=await resolveCardAiProvider(env,userId);
     if(!aiProvider)throw new Error('MLM AI 服務尚未連線');
     await processContactInsightsInBackground(env.DB,userId,id,aiProvider,env.OPENAI_CARD_MODEL);
     if(await queueMemberMatchRankingRefresh(env.DB,userId,true,id))await processMemberMatchRankings(env.DB,userId,aiProvider,env.OPENAI_CARD_MODEL);
@@ -343,7 +357,7 @@ function scheduleContactCrmInsights(env, ctx, userId, id) {
 
 function scheduleContactAiCardCrm(env,ctx,userId,id) {
   const task=(async()=>{
-    const aiProvider=await resolveCardAiProvider(env);
+    const aiProvider=await resolveCardAiProvider(env,userId);
     if(!aiProvider)throw new Error("MLM AI 服務尚未連線");
     await processContactAiCardCrm(env.DB,userId,id,aiProvider,env.OPENAI_CARD_MODEL);
   })();
@@ -353,7 +367,7 @@ function scheduleContactAiCardCrm(env,ctx,userId,id) {
 }
 function scheduleContactCardReverification(env,ctx,userId,id) {
   const task=(async()=>{
-    const aiProvider=await resolveCardAiProvider(env);
+    const aiProvider=await resolveCardAiProvider(env,userId);
     if(!aiProvider)throw new Error('MLM AI 服務尚未連線');
     await reverifyContactFromSource(env.DB,env.MEDIA,userId,id,aiProvider,env.OPENAI_CARD_MODEL);
     await processContactInsightsInBackground(env.DB,userId,id,aiProvider,env.OPENAI_CARD_MODEL);
@@ -367,7 +381,7 @@ function scheduleContactCardReverification(env,ctx,userId,id) {
 
 function scheduleMemberCrmInsights(env,ctx,userId) {
   const task=(async()=>{
-    const aiProvider=await resolveCardAiProvider(env);
+    const aiProvider=await resolveCardAiProvider(env,userId);
     await processMemberCrmInsight(env.DB,userId,aiProvider,env.OPENAI_CARD_MODEL);
     if(await queueMemberMatchRankingRefresh(env.DB,userId,true))await processMemberMatchRankings(env.DB,userId,aiProvider,env.OPENAI_CARD_MODEL);
   })();
@@ -379,7 +393,7 @@ function scheduleMemberMatchRanking(env,ctx,userId,alreadyQueued=false) {
   const task=(async()=>{
     const queued=alreadyQueued ? 1 : await queueMemberMatchRankingRefresh(env.DB,userId);
     if(!queued)return {processed:0,ranked:0};
-    const aiProvider=await resolveCardAiProvider(env);
+    const aiProvider=await resolveCardAiProvider(env,userId);
     if(!aiProvider)throw new Error('MLM AI 服務尚未連線');
     return processMemberMatchRankings(env.DB,userId,aiProvider,env.OPENAI_CARD_MODEL);
   })();
@@ -1265,7 +1279,7 @@ async function app(request, env, ctx) {
     try {
       const result = await actOnTask(env.DB, member.userId, decodeURIComponent(taskActionMatch[1]), (await readJson(request)) || {});
       if (result.needsAiNext) {
-        const next = generateNextTask(env.DB, env.MLM_WORKER, member.userId, result.task.id).catch((error) => console.error("Task Engine next-step generation failed", error));
+        const next = resolveCardAiProvider(env, member.userId).then((provider)=>generateNextTask(env.DB, provider, member.userId, result.task.id)).catch((error) => console.error("Task Engine next-step generation failed", error));
         if (ctx?.waitUntil) ctx.waitUntil(next);
       }
       return json({ success:true, ...result });
@@ -1309,11 +1323,19 @@ async function app(request, env, ctx) {
       });
       const contentType = request.headers.get("content-type") || "";
       const result = contentType.includes("application/json")
-        ? await parseCalendarVoice(env.MLM_WORKER, ((await readJson(request)) || {}).transcript, context, now)
+        ? await parseCalendarVoice(await resolveCardAiProvider(env, member.userId), ((await readJson(request)) || {}).transcript, context, now)
         : await (async () => {
           const form = await request.formData();
           return buildCalendarVoiceProposal(
-            env.MLM_WORKER,
+            {
+              async fetch(requestUrl, init) {
+                if (String(requestUrl).includes("/transcriptions")) {
+                  if (!env.MLM_WORKER?.fetch) throw new Error("AI 語音轉錄服務尚未連線");
+                  return env.MLM_WORKER.fetch(requestUrl, init);
+                }
+                return (await resolveCardAiProvider(env, member.userId)).fetch(requestUrl, init);
+              },
+            },
             form.get("audio") || form.get("file"),
             form.get("durationMs"),
             context,
@@ -1499,7 +1521,7 @@ async function app(request, env, ctx) {
       }));
       const cached = await findCachedSmartMatch(env.DB, member.userId, requestKey, contacts);
       if (cached) return json({ success: true, ...cached, cached: true, numberScienceUsed: false, numberScienceReports: [] });
-      const aiProvider = await resolveCardAiProvider(env);
+      const aiProvider = await resolveCardAiProvider(env, member.userId);
       const matches = await matchContacts({ contacts, member, query, apiKey: aiProvider, model: env.OPENAI_CARD_MODEL });
       await saveSmartMatch(env.DB, { userId: member.userId, requestKey, query, matches, numberScienceUsed: false, numberScienceReports: [] });
       return json({ success: true, matches, cached: false, numberScienceUsed: false, numberScienceReports: [] });
@@ -1526,7 +1548,7 @@ async function app(request, env, ctx) {
     if (!member) return json({ success:false, error:"Unauthorized" }, 401);
     try {
       const eventId=decodeURIComponent(submitBackgroundImport[1]);
-      const aiProvider=await resolveCardAiProvider(env);
+      const aiProvider=await resolveCardAiProvider(env,member.userId);
       const result=await submitImportInBackground(env.DB, env.MEDIA, member.userId, eventId, aiProvider, env.OPENAI_CARD_MODEL);
       if(!result.existing){
         scheduleCardImportPipeline(env,ctx,member.userId,eventId,aiProvider);
@@ -1540,7 +1562,7 @@ async function app(request, env, ctx) {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
     try {
-      const aiProvider = await resolveCardAiProvider(env);
+      const aiProvider = await resolveCardAiProvider(env, member.userId);
       const result = await recognizeImport(env.DB, env.MEDIA, member.userId, decodeURIComponent(recognizeCardImport[1]), aiProvider, env.OPENAI_CARD_MODEL);
       return json({ success: true, ...result });
     } catch (error) { return badRequest(error.message || "名片辨識失敗"); }
@@ -1569,7 +1591,7 @@ async function app(request, env, ctx) {
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
     try {
       const cardId = decodeURIComponent(contactInsightRetryMatch[1]);
-      const aiProvider = await resolveCardAiProvider(env);
+      const aiProvider = await resolveCardAiProvider(env, member.userId);
       if (!aiProvider) return json({ success: false, error: "五大標籤分析服務尚未連線" }, 503);
       await queueContactCrmInsights(env.DB, member.userId, cardId, true);
       scheduleContactCrmInsights(env, ctx, member.userId, cardId);
@@ -1601,7 +1623,7 @@ async function app(request, env, ctx) {
     const member = await currentMember(request, env);
     if (!member) return json({ success:false, error:"Unauthorized" }, 401);
     try {
-      const aiProvider = await resolveCardAiProvider(env);
+      const aiProvider = await resolveCardAiProvider(env, member.userId);
       const result = await expandContactContent(env.DB, member.userId, decodeURIComponent(contactContentExpandMatch[1]), aiProvider, env.OPENAI_CARD_MODEL);
       return json({ success:true, ...result });
     } catch (error) { return badRequest(error.message || "AI 擴寫失敗"); }
@@ -1806,7 +1828,7 @@ async function app(request, env, ctx) {
     if (url.pathname.startsWith("/v1/admin/rich-menu") && !admin.adminAccess.canManageRichMenu) {
       return json({ success: false, error: "圖文選單管理權限不足" }, 403);
     }
-    if (url.pathname.startsWith("/v1/admin/openai-settings") && !admin.adminAccess.systemAccess) {
+    if ((url.pathname.startsWith("/v1/admin/openai-settings") || url.pathname.startsWith("/v1/admin/ai-")) && !admin.adminAccess.systemAccess) {
       return json({ success: false, error: "只有系統權限管理員可設定 API 金鑰" }, 403);
     }
     if (request.method === "GET" && url.pathname === "/v1/admin/blog/posts") {
@@ -1835,6 +1857,30 @@ async function app(request, env, ctx) {
       } catch (error) {
         return badRequest(error.message || "文章刪除失敗");
       }
+    }
+    if (request.method === "GET" && url.pathname === "/v1/admin/ai-providers") {
+      return json({
+        success:true,
+        primary:"gemini",
+        fallback:"openai",
+        gemini:getGeminiKeyStatus(env.GEMINI_API_KEY, env.GEMINI_MODEL),
+        openai:await getOpenAIKeyStatus(env.DB, env.OPENAI_API_KEY),
+      });
+    }
+    if (request.method === "POST" && url.pathname === "/v1/admin/ai-providers/gemini/test") {
+      try { return json({ success:true, ...(await testGeminiConnection(env.GEMINI_API_KEY, env.GEMINI_MODEL)) }); }
+      catch(error) { return badRequest(error.message || "Gemini 連線測試失敗"); }
+    }
+    if (request.method === "GET" && url.pathname === "/v1/admin/ai-usage") {
+      try {
+        return json({ success:true, ...(await getAiUsageReport(env.DB, {
+          from:url.searchParams.get("from") || "",
+          to:url.searchParams.get("to") || "",
+          provider:url.searchParams.get("provider") || "",
+          feature:url.searchParams.get("feature") || "",
+          limit:url.searchParams.get("limit") || 50,
+        })) });
+      } catch(error) { return badRequest(error.message || "AI 用量讀取失敗"); }
     }
     if (request.method === "GET" && url.pathname === "/v1/admin/openai-settings") {
       return json({ success:true, ...(await getOpenAIKeyStatus(env.DB, env.OPENAI_API_KEY)) });
@@ -1985,7 +2031,7 @@ async function app(request, env, ctx) {
       if(kind==="collection"){
         const existing=await env.DB.prepare("SELECT scanner_user_id FROM contact_cards WHERE id=? AND status='active'").bind(cardId).first();
         if(!existing)return json({success:false,error:"找不到收藏名片"},404);
-        const aiProvider=await resolveCardAiProvider(env);
+        const aiProvider=await resolveCardAiProvider(env,existing.scanner_user_id);
         if(!aiProvider)return json({success:false,error:"MLM AI 服務尚未連線"},503);
         await queueContactCrmInsights(env.DB,existing.scanner_user_id,cardId,true);
         scheduleContactCrmInsights(env,ctx,existing.scanner_user_id,cardId);
@@ -1993,7 +2039,7 @@ async function app(request, env, ctx) {
       }else{
         const existing=await env.DB.prepare("SELECT platform_user_id FROM personal_cards WHERE id=? AND status!='archived'").bind(cardId).first();
         if(!existing)return json({success:false,error:"找不到會員名片"},404);
-        const aiProvider=await resolveCardAiProvider(env);
+        const aiProvider=await resolveCardAiProvider(env,existing.platform_user_id);
         if(!aiProvider)return json({success:false,error:"MLM AI 服務尚未連線"},503);
         await queueMemberCrmInsight(env.DB,existing.platform_user_id);
         scheduleMemberCrmInsights(env,ctx,existing.platform_user_id);
