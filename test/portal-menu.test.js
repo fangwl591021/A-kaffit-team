@@ -4,6 +4,7 @@ import test from "node:test";
 
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const menuCss = readFileSync(new URL("../public/task-engine-20260813-4.css", import.meta.url), "utf8");
+const productionIndex = readFileSync(new URL("../public/index-20260813-126.txt", import.meta.url), "utf8");
 
 test("內頁功能列移除星座、AI 任務與返回首頁，返回首頁固定在 Banner", () => {
   const start = app.indexOf("const portalMenu");
@@ -39,4 +40,5 @@ test("內頁功能列移除星座、AI 任務與返回首頁，返回首頁固�
 test("內頁五項功能列平均填滿寬度，不產生橫向留白", () => {
   assert.match(menuCss, /\.portal-menu-text\{overflow-x:hidden;grid-template-columns:repeat\(5,minmax\(0,1fr\)\)!important\}/);
   assert.doesNotMatch(menuCss, /repeat\(7,minmax\(96px,1fr\)\)/);
+  assert.match(productionIndex, /task-engine-20260813-4\.css/);
 });
