@@ -2707,9 +2707,11 @@ async function app(request, env, ctx) {
       const token = body.token || randomInviteToken();
       try {
         const invite = await createInviteLink(env.DB, member.userId, token);
-        // 專屬分享是永久推薦入口，固定留在 A-kaffit 網域，
-        // 不與共用 LIFF 入口或限時錢包 QR 綁定。
-        const shareUrl = `${url.origin}/i/${encodeURIComponent(invite.token)}`;
+        // LINE 內的會員入口必須使用本系統 LIFF URL，才能保留 LIFF Browser
+        //（尤其是 Android 原生相機 capture 行為）。舊 /i/:token 仍保留相容。
+        const shareUrl = env.LIFF_ID
+          ? `https://liff.line.me/${encodeURIComponent(env.LIFF_ID)}?invite=${encodeURIComponent(invite.token)}`
+          : `${url.origin}/i/${encodeURIComponent(invite.token)}`;
       return json(
         {
           success: true,

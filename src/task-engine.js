@@ -348,7 +348,10 @@ export async function generateNextTask(db, provider, userId, taskId) {
 }
 
 function taskCenterUrl(env, taskId = "") {
-  const base = text(env.PUBLIC_APP_URL, 300) || "https://akaffit-team.fangwl591021.workers.dev/";
+  const liffId = text(env.LIFF_ID, 200);
+  const base = liffId
+    ? `https://liff.line.me/${encodeURIComponent(liffId)}`
+    : text(env.PUBLIC_APP_URL, 300) || "https://akaffit-team.fangwl591021.workers.dev/";
   const url = new URL(base);
   url.searchParams.set("tab", "tasks");
   if (taskId) url.searchParams.set("task", taskId);
