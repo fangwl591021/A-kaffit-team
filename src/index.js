@@ -691,10 +691,13 @@ async function officialAkaffitSite() {
               return;
             }
             jqueryLoaded = true;
+            element.setAttribute("src", new URL(src, AKAFFIT_OFFICIAL_URL).href);
           } else if (pathname === "/script/script.js") {
             element.setAttribute("src", "/akaffit-official-runtime");
           } else if (pathname === "/slick/slick.min.js") {
             element.setAttribute("src", "/akaffit-official-slick.js");
+          } else {
+            element.setAttribute("src", new URL(src, AKAFFIT_OFFICIAL_URL).href);
           }
         } catch { /* keep malformed upstream URL untouched */ }
       },
@@ -708,6 +711,8 @@ async function officialAkaffitSite() {
             element.setAttribute("href", "/akaffit-official-slick.css");
           } else if (pathname === "/slick/slick-theme.css") {
             element.setAttribute("href", "/akaffit-official-slick-theme.css");
+          } else {
+            element.setAttribute("href", new URL(href, AKAFFIT_OFFICIAL_URL).href);
           }
         } catch { /* keep malformed upstream URL untouched */ }
       },
