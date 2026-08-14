@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { CARD_IMAGE_THRESHOLDS, detectCardQuad, evaluateCardQuad, perspectiveCoefficients, warpPerspective } from "../public/card-image-smart-20260815-3.js";
+import { CARD_IMAGE_THRESHOLDS, detectCardQuad, evaluateCardQuad, expandCardQuad, perspectiveCoefficients, warpPerspective } from "../public/card-image-smart-20260815-4.js";
 import { normalizeCardImageMetadata } from "../src/card-image-processing.js";
 
 const source = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
@@ -37,6 +37,19 @@ test("detector prefers the outer 90 by 54 card boundary over inner text edges", 
   assert.ok(found.aspect>1.55&&found.aspect<1.78);
   assert.ok(found.coverage>0.5);
   assert.ok(found.points[0].x<40&&found.points[2].x>260);
+});
+
+test("safe padding shifts across image edges instead of clipping card content", () => {
+  const expanded=expandCardQuad([{x:0,y:605},{x:2879,y:605},{x:2879,y:2358},{x:0,y:2358}],3024,4032);
+  assert.equal(expanded[0].x,0);
+  assert.equal(expanded[1].x,3024);
+  assert.ok(expanded[0].y<605);
+  assert.ok(expanded[2].y>2358);
+  const phonePhoto=expandCardQuad([{x:129,y:5},{x:643,y:5},{x:643,y:315},{x:129,y:315}],720,540);
+  assert.ok(phonePhoto[0].x<80);
+  assert.ok(phonePhoto[1].x>690);
+  assert.equal(phonePhoto[0].y,0);
+  assert.ok(phonePhoto[2].y>370);
 });
 
 test("perspective warp calculates both source coordinates without a runtime reference error", () => {
@@ -88,7 +101,7 @@ test("original and processed images have separate authenticated storage contract
 
 test("production browser flow preserves originals and only sends processed job ids into OCR", () => {
   const app=source("public/app.js");
-  const production=source("public/app-20260815-128.js");
+  const production=source("public/app-20260815-129.js");
   for(const text of [app,production]){
     assert.match(text,/uploadCardImageOriginal\(file, sideLabel, purpose\)/);
     assert.match(text,/processBusinessCardImage\(file\)/);
