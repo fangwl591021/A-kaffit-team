@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { CARD_IMAGE_THRESHOLDS, evaluateCardQuad, perspectiveCoefficients } from "../public/card-image-smart-20260814-1.js";
+import { CARD_IMAGE_THRESHOLDS, evaluateCardQuad, perspectiveCoefficients, warpPerspective } from "../public/card-image-smart-20260815-2.js";
 import { normalizeCardImageMetadata } from "../src/card-image-processing.js";
 
 const source = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
@@ -18,6 +18,27 @@ test("low-coverage geometry falls back to manual review", () => {
   assert.ok(metrics.confidence < CARD_IMAGE_THRESHOLDS.confidence);
 });
 
+test("perspective warp calculates both source coordinates without a runtime reference error", () => {
+  const previousDocument=globalThis.document;
+  const pixels=new Uint8ClampedArray([
+    10,20,30,255, 40,50,60,255,
+    70,80,90,255, 100,110,120,255,
+  ]);
+  const outputContext={
+    output:null,
+    createImageData:(width,height)=>({data:new Uint8ClampedArray(width*height*4)}),
+    putImageData(imageData){this.output=imageData;},
+  };
+  globalThis.document={createElement:()=>({width:0,height:0,getContext:()=>outputContext})};
+  const source={width:2,height:2,getContext:()=>({getImageData:()=>({data:pixels})})};
+  try{
+    warpPerspective(source,[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}],2,2);
+    assert.deepEqual([...outputContext.output.data], [...pixels]);
+  } finally {
+    if(previousDocument===undefined)delete globalThis.document;
+    else globalThis.document=previousDocument;
+  }
+});
 test("server normalizes untrusted processing metadata", () => {
   const metadata=normalizeCardImageMetadata({
     detection:{detected:true,confidence:5},quality:{overall:999,blur:-2},
@@ -46,7 +67,7 @@ test("original and processed images have separate authenticated storage contract
 
 test("production browser flow preserves originals and only sends processed job ids into OCR", () => {
   const app=source("public/app.js");
-  const production=source("public/app-20260814-126.js");
+  const production=source("public/app-20260815-127.js");
   for(const text of [app,production]){
     assert.match(text,/uploadCardImageOriginal\(file, sideLabel, purpose\)/);
     assert.match(text,/processBusinessCardImage\(file\)/);
