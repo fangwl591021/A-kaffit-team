@@ -88,6 +88,12 @@ import {
   verifyContactCardData,
 } from "./card-collection.js";
 import {
+  createCardImageJob,
+  getCardImageJob,
+  saveCardImageResult,
+  serveProcessedCardImage,
+} from "./card-image-processing.js";
+import {
   processContactAiCardCrm,
   queueContactAiCardCrm,
   queueMemberAiCardCrmBackfill,
@@ -1142,6 +1148,39 @@ async function app(request, env, ctx) {
     }
   }
 
+  if (request.method === "POST" && url.pathname === "/v1/card-images") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      return json({ success:true, job:await createCardImageJob(env.DB, env.MEDIA, member.userId, request) }, 201);
+    } catch (error) { return badRequest(error.message || "名片原圖上傳失敗"); }
+  }
+
+  const cardImageResult = url.pathname.match(/^\/v1\/card-images\/([^/]+)\/result$/);
+  if (request.method === "POST" && cardImageResult) {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    try {
+      const jobId=decodeURIComponent(cardImageResult[1]);
+      return json({ success:true, job:await saveCardImageResult(env.DB, env.MEDIA, member.userId, jobId, await request.formData()) });
+    } catch (error) { return badRequest(error.message || "名片影像處理結果儲存失敗"); }
+  }
+
+  const cardImageProcessed = url.pathname.match(/^\/v1\/card-images\/([^/]+)\/processed$/);
+  if (request.method === "GET" && cardImageProcessed) {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    const response=await serveProcessedCardImage(env.DB, env.MEDIA, member.userId, decodeURIComponent(cardImageProcessed[1]));
+    return response || json({ success:false, error:"找不到處理後名片圖片" }, 404);
+  }
+
+  const cardImageJob = url.pathname.match(/^\/v1\/card-images\/([^/]+)$/);
+  if (request.method === "GET" && cardImageJob) {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    const job=await getCardImageJob(env.DB, member.userId, decodeURIComponent(cardImageJob[1]));
+    return job ? json({ success:true, job }) : json({ success:false, error:"找不到名片影像處理紀錄" }, 404);
+  }
   if (request.method === "POST" && url.pathname === "/v1/cards/me/imports") {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
@@ -2786,7 +2825,7 @@ async function app(request, env, ctx) {
 
   if (env.ASSETS) {
     const assetRequest = url.pathname === "/"
-      ? new Request(new URL("/index-20260813-126.txt", url.origin), request)
+      ? new Request(new URL("/index-20260814-127.txt", url.origin), request)
       : request;
     const assetResponse = await env.ASSETS.fetch(assetRequest);
     if (url.pathname === "/" || ["/admin/", "/admin/index.html", "/admin.html"].includes(url.pathname)) {

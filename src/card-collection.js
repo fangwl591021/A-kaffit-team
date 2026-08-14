@@ -2,6 +2,7 @@ import { newId } from './member-repository.js';
 import { sha256 } from './auth.js';
 import { memberMatchFromVersions } from './member-match-ranking.js';
 import { aiCardCrmFromVersions } from './ai-card-crm.js';
+import { resolveCardImageJobFile } from './card-image-processing.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -666,7 +667,15 @@ async function updateCardImportFingerprint(db,eventId,status) {
 }
 
 export async function createImport(db, bucket, userId, form, options = {}) {
-  const files = ['front','back'].map((key)=>form.get(key)).filter((file)=>file instanceof File && file.size);
+  const files = [];
+  for (const key of ['front','back']) {
+    const jobId = text(form.get(key + 'JobId'), 120);
+    const uploaded = form.get(key);
+    const file = jobId
+      ? await resolveCardImageJobFile(db, bucket, userId, jobId)
+      : uploaded instanceof File && uploaded.size ? uploaded : null;
+    if (file) files.push(file);
+  }
   if (!files.length || files.length > 2) throw new Error('請選擇名片正面，最多可加一張背面');
   for (const file of files) {
     if (!ALLOWED_IMAGE_TYPES.has(file.type)) throw new Error('名片圖片僅支援 JPEG、PNG 或 WebP');

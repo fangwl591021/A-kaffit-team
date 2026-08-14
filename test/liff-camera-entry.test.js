@@ -32,7 +32,7 @@ test("camera inputs are rebuilt after each card page renders and before handlers
   assert.match(app, /refreshBusinessCardCameraInputs\("mycard"\);\s*bindPersonalCardScanInputs\(\)/);
   assert.match(app, /refreshBusinessCardCameraInputs\("collected"\);\s*bindScanInputs\(\)/);
   assert.doesNotMatch(app, /refreshNativeBusinessCardCameraInput\("(?:personalCardGallery|cardGallery)"\)/);
-  assert.match(app, /cropCollectionScanImage\(selected\[index\], index \? "背面" : "正面"\)/);
+  assert.match(app, /prepareBusinessCardImage\(selected\[index\], index \? "背面" : "正面", "personal"\)/);
   assert.match(app, /\$\("#personalCardCamera"\)\.onchange/);
   assert.match(app, /\$\("#cardCamera"\)\.onchange/);
 });
@@ -60,6 +60,6 @@ test("member entry URLs prefer this project's LIFF and preserve legacy invite pa
 });
 
 test("production index loads the cache-busted LIFF camera build", () => {
-  assert.match(index, /app-20260813-125\.js\?v=20260813-125/);
+  assert.match(index, /app-20260814-126\.js\?v=20260814-126/);
   assert.match(index, /styles\.css\?v=20260813-71/);
 });
