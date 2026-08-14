@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { CARD_IMAGE_THRESHOLDS, evaluateCardQuad, perspectiveCoefficients, warpPerspective } from "../public/card-image-smart-20260815-2.js";
+import { CARD_IMAGE_THRESHOLDS, detectCardQuad, evaluateCardQuad, perspectiveCoefficients, warpPerspective } from "../public/card-image-smart-20260815-3.js";
 import { normalizeCardImageMetadata } from "../src/card-image-processing.js";
 
 const source = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
@@ -16,6 +16,27 @@ test("high-confidence business-card geometry passes automatic processing thresho
 test("low-coverage geometry falls back to manual review", () => {
   const metrics=evaluateCardQuad([{x:440,y:300},{x:560,y:300},{x:560,y:370},{x:440,y:370}],1000,700);
   assert.ok(metrics.confidence < CARD_IMAGE_THRESHOLDS.confidence);
+});
+
+test("a nearly full-frame photo can never be accepted as a business card", () => {
+  const metrics=evaluateCardQuad([{x:1,y:1},{x:999,y:1},{x:999,y:699},{x:1,y:699}],1000,700);
+  assert.equal(metrics.plausible,false);
+  assert.equal(metrics.confidence,0);
+});
+
+test("detector prefers the outer 90 by 54 card boundary over inner text edges", () => {
+  const width=300,height=220,data=new Uint8ClampedArray(width*height*4);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const inside=x>=20&&x<=280&&y>=32&&y<=188;
+    const text=inside&&x>=95&&x<=220&&y>=80&&y<=112;
+    const value=text?35:(inside?235:105),offset=(y*width+x)*4;
+    data[offset]=value;data[offset+1]=value;data[offset+2]=value;data[offset+3]=255;
+  }
+  const found=detectCardQuad({width,height,data});
+  assert.ok(found);
+  assert.ok(found.aspect>1.55&&found.aspect<1.78);
+  assert.ok(found.coverage>0.5);
+  assert.ok(found.points[0].x<40&&found.points[2].x>260);
 });
 
 test("perspective warp calculates both source coordinates without a runtime reference error", () => {
@@ -67,7 +88,7 @@ test("original and processed images have separate authenticated storage contract
 
 test("production browser flow preserves originals and only sends processed job ids into OCR", () => {
   const app=source("public/app.js");
-  const production=source("public/app-20260815-127.js");
+  const production=source("public/app-20260815-128.js");
   for(const text of [app,production]){
     assert.match(text,/uploadCardImageOriginal\(file, sideLabel, purpose\)/);
     assert.match(text,/processBusinessCardImage\(file\)/);
