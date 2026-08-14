@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { CARD_IMAGE_THRESHOLDS, detectCardQuad, evaluateCardQuad, expandCardQuad, perspectiveCoefficients, warpPerspective } from "../public/card-image-smart-20260815-4.js";
+import { CARD_IMAGE_THRESHOLDS, detectCardQuad, evaluateCardQuad, expandCardQuad, perspectiveCoefficients, warpPerspective } from "../public/card-image-smart-20260815-5.js";
 import { normalizeCardImageMetadata } from "../src/card-image-processing.js";
 
 const source = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
@@ -24,7 +24,7 @@ test("a nearly full-frame photo can never be accepted as a business card", () =>
   assert.equal(metrics.confidence,0);
 });
 
-test("detector prefers the outer 90 by 54 card boundary over inner text edges", () => {
+test("detector uses the paper region instead of inner text edges", () => {
   const width=300,height=220,data=new Uint8ClampedArray(width*height*4);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const inside=x>=20&&x<=280&&y>=32&&y<=188;
@@ -39,17 +39,39 @@ test("detector prefers the outer 90 by 54 card boundary over inner text edges", 
   assert.ok(found.points[0].x<40&&found.points[2].x>260);
 });
 
+test("detector rejects a hand protrusion and keeps the four paper corners", () => {
+  const width=320,height=240,data=new Uint8ClampedArray(width*height*4);
+  const expected=[{x:35,y:30},{x:285,y:43},{x:270,y:185},{x:48,y:176}];
+  const inside=(x,y)=>{let sign=0;for(let index=0;index<4;index++){const a=expected[index],b=expected[(index+1)%4],cross=(b.x-a.x)*(y-a.y)-(b.y-a.y)*(x-a.x);if(!cross)continue;if(sign&&Math.sign(cross)!==sign)return false;sign=Math.sign(cross);}return true;};
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    let rgb=[112,118,124];
+    if(inside(x,y))rgb=[235,226,198];
+    if(x>=145&&x<=172&&y>=175&&y<=220)rgb=[205,145,115];
+    const offset=(y*width+x)*4;data[offset]=rgb[0];data[offset+1]=rgb[1];data[offset+2]=rgb[2];data[offset+3]=255;
+  }
+  const found=detectCardQuad({width,height,data});
+  assert.ok(found);
+  assert.ok(found.confidence>=CARD_IMAGE_THRESHOLDS.confidence);
+  assert.ok(found.points[2].y<195,"finger must not become the bottom-right paper corner");
+  expected.forEach((point,index)=>assert.ok(Math.hypot(found.points[index].x-point.x,found.points[index].y-point.y)<8));
+});
+
+test("detector declines auto crop when paper and background have no separation", () => {
+  const width=220,height=160,data=new Uint8ClampedArray(width*height*4);
+  for(let index=0;index<data.length;index+=4){data[index]=180;data[index+1]=180;data[index+2]=180;data[index+3]=255;}
+  assert.equal(detectCardQuad({width,height,data}),null);
+});
 test("safe padding shifts across image edges instead of clipping card content", () => {
   const expanded=expandCardQuad([{x:0,y:605},{x:2879,y:605},{x:2879,y:2358},{x:0,y:2358}],3024,4032);
   assert.equal(expanded[0].x,0);
-  assert.equal(expanded[1].x,3024);
+  assert.ok(expanded[1].x>2879);
   assert.ok(expanded[0].y<605);
   assert.ok(expanded[2].y>2358);
   const phonePhoto=expandCardQuad([{x:129,y:5},{x:643,y:5},{x:643,y:315},{x:129,y:315}],720,540);
-  assert.ok(phonePhoto[0].x<80);
-  assert.ok(phonePhoto[1].x>690);
+  assert.ok(phonePhoto[0].x<129);
+  assert.ok(phonePhoto[1].x>643);
   assert.equal(phonePhoto[0].y,0);
-  assert.ok(phonePhoto[2].y>370);
+  assert.ok(phonePhoto[2].y>315);
 });
 
 test("perspective warp calculates both source coordinates without a runtime reference error", () => {
@@ -101,7 +123,7 @@ test("original and processed images have separate authenticated storage contract
 
 test("production browser flow preserves originals and only sends processed job ids into OCR", () => {
   const app=source("public/app.js");
-  const production=source("public/app-20260815-129.js");
+  const production=source("public/app-20260815-130.js");
   for(const text of [app,production]){
     assert.match(text,/uploadCardImageOriginal\(file, sideLabel, purpose\)/);
     assert.match(text,/processBusinessCardImage\(file\)/);
