@@ -1623,10 +1623,12 @@ async function app(request, env, ctx) {
       const result = await confirmImport(env.DB, env.MEDIA, member.userId, decodeURIComponent(confirmCardImport[1]), (await readJson(request)) || {});
       scheduleContactCrmInsights(env,ctx,member.userId,result.card.id);
       scheduleContactAiCardCrm(env,ctx,member.userId,result.card.id);
-      const reward = result.updated
-        ? {status:"duplicate",points:0}
-        : await queueAndFulfillCardCollectionReward(env,member.userId,result.card.id);
-      return json({ success: true, ...result, reward }, result.updated ? 200 : 201);
+      const rewardFingerprint=await env.DB.prepare('SELECT status FROM card_import_fingerprints WHERE event_id=? AND user_id=? LIMIT 1').bind(decodeURIComponent(confirmCardImport[1]),member.userId).first();
+      const rewardEligible=!result.updated && rewardFingerprint?.status==='completed';
+      const reward = rewardEligible
+        ? await queueAndFulfillCardCollectionReward(env,member.userId,result.card.id)
+        : {status:"duplicate",points:0};
+      return json({ success: true, ...result, reward }, result.updated || !rewardEligible ? 200 : 201);
     } catch (error) {
       return json({ success: false, error: error.message || "名片儲存失敗", code: error.code || "save_failed", duplicate: error.duplicate || null }, error.code ? 409 : 400);
     }
