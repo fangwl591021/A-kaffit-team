@@ -5,8 +5,6 @@ on:
     branches:
       - agent/card-scanner-v2
     paths:
-      - scripts/apply-card-vision-localization-v3.mjs
-      - scripts/fix-card-vision-localization-v3.mjs
       - scripts/apply-card-vision-v3-stability.mjs
       - test/card-vision-v3-stability.test.js
       - .github/workflows/apply-card-vision-localization-v3.yml
@@ -25,11 +23,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply patch
-        run: |
-          node scripts/apply-card-vision-localization-v3.mjs
-          node scripts/fix-card-vision-localization-v3.mjs
-          node scripts/apply-card-vision-v3-stability.mjs
+      - name: Apply stability patch
+        run: node scripts/apply-card-vision-v3-stability.mjs
       - name: Install dependencies
         run: npm ci
       - name: Test
@@ -66,9 +61,6 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/card-collection.js src/index.js public/app.js public/app-20260815-132.js \
-            test/card-vision-localization-v3.test.js test/card-vision-v3-stability.test.js test/business-card-verification.test.js \
-            test/card-image-smart.test.js test/card-scanner-v2-integration.test.js \
-            test/card-scanner-v2-lab.test.js test/card-scanner-v2.test.js test/personal-card-scan.test.js
+          git add public/app-20260815-132.js test/card-vision-v3-stability.test.js
           git commit -m "fix: harden Vision V3 card crop stability"
           git push origin HEAD:agent/card-scanner-v2
