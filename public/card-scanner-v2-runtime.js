@@ -40,8 +40,25 @@ function gentleEnhance(canvas){
 }
 function normalizedCorners(points,width,height){return points.map((point)=>({x:clamp(point.x/width,0,1),y:clamp(point.y/height,0,1)}));}
 function releaseCanvas(canvas){if(canvas){canvas.width=1;canvas.height=1;}}
-function detectionMetadata(found,candidates=[]){
-  return {detected:Boolean(found),confidence:Number(found?.confidence||0),strategy:found?.strategy||'',edgeSupport:Number(found?.edgeSupport||0),rawContentDensity:Number(found?.rawContentDensity||0),contentDensity:Number(found?.contentDensity||0),contentFit:Number(found?.contentFit||0),surfaceConsistency:Number(found?.surfaceConsistency||0),candidateCount:candidates.length,candidates:candidates.map(c=>({strategy:c.strategy||'',confidence:Number(c.confidence||0),contentDensity:Number(c.contentDensity||0),contentFit:Number(c.contentFit||0),surfaceConsistency:Number(c.surfaceConsistency||0),edgeSupport:Number(c.edgeSupport||0),coverage:Number(c.coverage||0)}))};
+function bounds(points=[]){
+  if(points.length!==4)return null;
+  const xs=points.map(p=>Number(p.x)||0),ys=points.map(p=>Number(p.y)||0);
+  return {left:Math.min(...xs),top:Math.min(...ys),right:Math.max(...xs),bottom:Math.max(...ys)};
+}
+function boxIou(aPoints,bPoints){
+  const a=bounds(aPoints),b=bounds(bPoints);if(!a||!b)return 0;
+  const iw=Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left));
+  const ih=Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+  const intersection=iw*ih;
+  const areaA=Math.max(0,a.right-a.left)*Math.max(0,a.bottom-a.top),areaB=Math.max(0,b.right-b.left)*Math.max(0,b.bottom-b.top);
+  return intersection/Math.max(1,areaA+areaB-intersection);
+}
+function detectionMetadata(found,candidates=[],consensus={}){
+  return {
+    detected:Boolean(found),confidence:Number(found?.confidence||0),strategy:found?.strategy||'',edgeSupport:Number(found?.edgeSupport||0),rawContentDensity:Number(found?.rawContentDensity||0),contentDensity:Number(found?.contentDensity||0),contentFit:Number(found?.contentFit||0),surfaceConsistency:Number(found?.surfaceConsistency||0),
+    consensusApproved:consensus.approved===true,consensusWith:consensus.with||'',consensusIou:Number(consensus.iou||0),candidateCount:candidates.length,
+    candidates:candidates.map(c=>({strategy:c.strategy||'',confidence:Number(c.confidence||0),contentDensity:Number(c.contentDensity||0),contentFit:Number(c.contentFit||0),surfaceConsistency:Number(c.surfaceConsistency||0),edgeSupport:Number(c.edgeSupport||0),coverage:Number(c.coverage||0)})),
+  };
 }
 function candidateScore(candidate){
   const base=Number(candidate?.confidence||0),content=Number(candidate?.contentDensity||0),fit=Number(candidate?.contentFit||0),surface=Number(candidate?.surfaceConsistency||0),edge=Number(candidate?.edgeSupport||0);
@@ -50,9 +67,30 @@ function candidateScore(candidate){
   return base*.74+edge*.16+surface*.05+fit*.05;
 }
 function chooseCandidate(imageData){
-  const candidates=[detectCardQuad(imageData),detectLongBorderQuad(imageData),detectTextGuidedCard(imageData)].filter(Boolean);
-  candidates.sort((a,b)=>candidateScore(b)-candidateScore(a));
-  return {found:candidates[0]||null,candidates};
+  const hough=detectCardQuad(imageData),border=detectLongBorderQuad(imageData),text=detectTextGuidedCard(imageData);
+  const candidates=[hough,border,text].filter(Boolean).sort((a,b)=>candidateScore(b)-candidateScore(a));
+  if(!candidates.length)return {found:null,candidates,consensus:{approved:false,with:'',iou:0}};
+  const geometry=[hough,border].filter(Boolean).sort((a,b)=>candidateScore(b)-candidateScore(a));
+  let bestPair=null;
+  const pairs=[];
+  if(hough&&border)pairs.push([hough,border,'edge-hough + long-border']);
+  if(hough&&text)pairs.push([hough,text,'edge-hough + text-guided']);
+  if(border&&text)pairs.push([border,text,'long-border + text-guided']);
+  for(const [a,b,label] of pairs){
+    const iou=boxIou(a.points,b.points);
+    const threshold=(a===text||b===text)?.58:.62;
+    if(iou<threshold)continue;
+    const combined=(candidateScore(a)+candidateScore(b))/2+iou*.16;
+    if(!bestPair||combined>bestPair.combined)bestPair={a,b,label,iou,combined};
+  }
+  if(bestPair){
+    const preferred=[bestPair.a,bestPair.b].sort((a,b)=>candidateScore(b)-candidateScore(a))[0];
+    return {found:preferred,candidates,consensus:{approved:true,with:bestPair.label,iou:bestPair.iou}};
+  }
+  // No detector is allowed to auto-crop by itself. Keep the most credible geometry candidate
+  // only as a manual-crop hint; text-guided is advisory and can never be sole authority.
+  const hint=geometry[0]||candidates[0];
+  return {found:hint,candidates,consensus:{approved:false,with:'none',iou:0}};
 }
 
 export async function processBusinessCardImage(file){
@@ -62,10 +100,11 @@ export async function processBusinessCardImage(file){
   try{
     const analysisContext=analysisCanvas.getContext('2d',{willReadFrequently:true}),analysisImage=analysisContext.getImageData(0,0,analysisCanvas.width,analysisCanvas.height),quality=assessQuality(analysisImage);
     const selection=chooseCandidate(analysisImage),found=selection.found;
-    const baseMetadata={original:{width:plan.input.width,height:plan.input.height},working:{width:plan.working.width,height:plan.working.height},analysis:{width:plan.analysis.width,height:plan.analysis.height},detection:detectionMetadata(found,selection.candidates),card:{orientation:'',rotation:0},quality,processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},corners:found?normalizedCorners(found.points,analysisCanvas.width,analysisCanvas.height):[],warning:''};
+    const baseMetadata={original:{width:plan.input.width,height:plan.input.height},working:{width:plan.working.width,height:plan.working.height},analysis:{width:plan.analysis.width,height:plan.analysis.height},detection:detectionMetadata(found,selection.candidates,selection.consensus),card:{orientation:'',rotation:0},quality,processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},corners:found?normalizedCorners(found.points,analysisCanvas.width,analysisCanvas.height):[],warning:''};
     if(!found)return {file:null,metadata:{...baseMetadata,warning:'未能可靠找到名片四邊，請手動裁切；不會呼叫 AI 進行裁切。'}};
     const completeness=assessCardCompleteness(found.points,analysisCanvas.width,analysisCanvas.height);
     if(completeness.boundaryTouch||completeness.score<CARD_IMAGE_THRESHOLDS.completeness)return {file:null,metadata:{...baseMetadata,detection:{...baseMetadata.detection,confidence:Math.min(found.confidence,.69)},warning:'名片可能未完整入鏡或貼近照片邊界，請稍微拉遠後重新拍攝。'}};
+    if(!selection.consensus.approved)return {file:null,metadata:{...baseMetadata,warning:'多個本機偵測器沒有對同一個名片範圍達成一致；為避免錯裁，請人工確認裁切。'}};
     if(found.confidence<CARD_IMAGE_THRESHOLDS.confidence)return {file:null,metadata:{...baseMetadata,warning:'已找到可能的名片邊界，但信心不足；請確認或手動裁切。'}};
     const analysisExpanded=expandCardQuad(found.points,analysisCanvas.width,analysisCanvas.height),workingPoints=orderQuad(analysisPointsToWorking(analysisExpanded,plan));
     const widthEstimate=(distance(workingPoints[0],workingPoints[1])+distance(workingPoints[3],workingPoints[2]))/2,heightEstimate=(distance(workingPoints[0],workingPoints[3])+distance(workingPoints[1],workingPoints[2]))/2,outputSize=finalOutputSize(widthEstimate,heightEstimate);
