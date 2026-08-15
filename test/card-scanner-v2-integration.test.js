@@ -52,11 +52,24 @@ test('manual crop is final authority, uses working resolution and incomplete pho
   assert.doesNotMatch(gate,/fetch\(/);
 });
 
-test('phase B lab is a zero-token local-only diagnostic surface',()=>{
+test('v2.3 fallback ranks candidates using content and surface evidence, not long lines alone',()=>{
+  const fallback=source('public/card-scanner-v2-border-fallback.js');
+  assert.match(fallback,/candidateContentEvidence/);
+  assert.match(fallback,/contentDensity/);
+  assert.match(fallback,/contentFit/);
+  assert.match(fallback,/surfaceConsistency/);
+  assert.match(fallback,/rawContentDensity<\.035/);
+  assert.match(fallback,/strategy:'long-border-fallback-v2\.3'/);
+});
+
+test('phase B lab is a zero-token local-only diagnostic surface with v2.3 evidence',()=>{
   const lab=source('public/card-scanner-v2-lab.html');
-  assert.match(lab,/Card Scanner V2 Lab/);
+  assert.match(lab,/Card Scanner V2\.3 Lab/);
   assert.match(lab,/processBusinessCardImage/);
   assert.match(lab,/四邊信心/);
+  assert.match(lab,/內容密度/);
+  assert.match(lab,/內容貼合/);
+  assert.match(lab,/表面一致性/);
   assert.match(lab,/建議重新拍攝/);
   assert.doesNotMatch(lab,/fetch\(/);
   assert.doesNotMatch(lab,/\/recognize/);
