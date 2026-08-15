@@ -53,23 +53,29 @@ function boxIou(aPoints,bPoints){
   const areaA=Math.max(0,a.right-a.left)*Math.max(0,a.bottom-a.top),areaB=Math.max(0,b.right-b.left)*Math.max(0,b.bottom-b.top);
   return intersection/Math.max(1,areaA+areaB-intersection);
 }
-function detectionMetadata(found,candidates=[],consensus={}){
+function detectionMetadata(found,candidates=[],consensus={},frameRisk=null){
   return {
     detected:Boolean(found),confidence:Number(found?.confidence||0),strategy:found?.strategy||'',edgeSupport:Number(found?.edgeSupport||0),rawContentDensity:Number(found?.rawContentDensity||0),contentDensity:Number(found?.contentDensity||0),contentFit:Number(found?.contentFit||0),surfaceConsistency:Number(found?.surfaceConsistency||0),
+    incompleteFrame:Boolean(frameRisk?.incompleteFrame),clippedSides:frameRisk?.clippedSides||{},
     consensusApproved:consensus.approved===true,consensusWith:consensus.with||'',consensusIou:Number(consensus.iou||0),candidateCount:candidates.length,
-    candidates:candidates.map(c=>({strategy:c.strategy||'',confidence:Number(c.confidence||0),contentDensity:Number(c.contentDensity||0),contentFit:Number(c.contentFit||0),surfaceConsistency:Number(c.surfaceConsistency||0),edgeSupport:Number(c.edgeSupport||0),coverage:Number(c.coverage||0)})),
+    candidates:candidates.map(c=>({strategy:c.strategy||'',confidence:Number(c.confidence||0),contentDensity:Number(c.contentDensity||0),contentFit:Number(c.contentFit||0),surfaceConsistency:Number(c.surfaceConsistency||0),edgeSupport:Number(c.edgeSupport||0),coverage:Number(c.coverage||0),incompleteFrame:Boolean(c.incompleteFrame),clippedSides:c.clippedSides||{}})),
   };
 }
 function candidateScore(candidate){
   const base=Number(candidate?.confidence||0),content=Number(candidate?.contentDensity||0),fit=Number(candidate?.contentFit||0),surface=Number(candidate?.surfaceConsistency||0),edge=Number(candidate?.edgeSupport||0);
-  if(candidate?.strategy==='text-guided-v2.4')return base*.52+content*.14+fit*.14+surface*.10+edge*.10;
+  if(candidate?.strategy?.startsWith('text-guided'))return base*.52+content*.14+fit*.14+surface*.10+edge*.10;
   if(candidate?.strategy?.startsWith('long-border'))return base*.55+content*.15+fit*.12+surface*.10+edge*.08;
   return base*.74+edge*.16+surface*.05+fit*.05;
 }
 function chooseCandidate(imageData){
   const hough=detectCardQuad(imageData),border=detectLongBorderQuad(imageData),text=detectTextGuidedCard(imageData);
+  const frameRisk=text?.incompleteFrame?text:null;
   const candidates=[hough,border,text].filter(Boolean).sort((a,b)=>candidateScore(b)-candidateScore(a));
-  if(!candidates.length)return {found:null,candidates,consensus:{approved:false,with:'',iou:0}};
+  if(frameRisk){
+    const geometry=[hough,border].filter(Boolean).sort((a,b)=>candidateScore(b)-candidateScore(a));
+    return {found:geometry[0]||text,candidates,frameRisk,consensus:{approved:false,with:'frame-clipped',iou:0}};
+  }
+  if(!candidates.length)return {found:null,candidates,frameRisk:null,consensus:{approved:false,with:'',iou:0}};
   const geometry=[hough,border].filter(Boolean).sort((a,b)=>candidateScore(b)-candidateScore(a));
   let bestPair=null;
   const pairs=[];
@@ -85,12 +91,10 @@ function chooseCandidate(imageData){
   }
   if(bestPair){
     const preferred=[bestPair.a,bestPair.b].sort((a,b)=>candidateScore(b)-candidateScore(a))[0];
-    return {found:preferred,candidates,consensus:{approved:true,with:bestPair.label,iou:bestPair.iou}};
+    return {found:preferred,candidates,frameRisk:null,consensus:{approved:true,with:bestPair.label,iou:bestPair.iou}};
   }
-  // No detector is allowed to auto-crop by itself. Keep the most credible geometry candidate
-  // only as a manual-crop hint; text-guided is advisory and can never be sole authority.
   const hint=geometry[0]||candidates[0];
-  return {found:hint,candidates,consensus:{approved:false,with:'none',iou:0}};
+  return {found:hint,candidates,frameRisk:null,consensus:{approved:false,with:'none',iou:0}};
 }
 
 export async function processBusinessCardImage(file){
@@ -100,7 +104,11 @@ export async function processBusinessCardImage(file){
   try{
     const analysisContext=analysisCanvas.getContext('2d',{willReadFrequently:true}),analysisImage=analysisContext.getImageData(0,0,analysisCanvas.width,analysisCanvas.height),quality=assessQuality(analysisImage);
     const selection=chooseCandidate(analysisImage),found=selection.found;
-    const baseMetadata={original:{width:plan.input.width,height:plan.input.height},working:{width:plan.working.width,height:plan.working.height},analysis:{width:plan.analysis.width,height:plan.analysis.height},detection:detectionMetadata(found,selection.candidates,selection.consensus),card:{orientation:'',rotation:0},quality,processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},corners:found?normalizedCorners(found.points,analysisCanvas.width,analysisCanvas.height):[],warning:''};
+    const baseMetadata={original:{width:plan.input.width,height:plan.input.height},working:{width:plan.working.width,height:plan.working.height},analysis:{width:plan.analysis.width,height:plan.analysis.height},detection:detectionMetadata(found,selection.candidates,selection.consensus,selection.frameRisk),card:{orientation:'',rotation:0},quality,processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},corners:found?normalizedCorners(found.points,analysisCanvas.width,analysisCanvas.height):[],warning:''};
+    if(selection.frameRisk){
+      const sides=Object.entries(selection.frameRisk.clippedSides||{}).filter(([,value])=>value).map(([key])=>({left:'左側',right:'右側',top:'上方',bottom:'下方'}[key]||key)).join('、');
+      return {file:null,metadata:{...baseMetadata,warning:`文字內容已延伸到照片${sides||'邊界'}，推估名片外框會超出照片；請稍微拉遠重新拍攝。`}};
+    }
     if(!found)return {file:null,metadata:{...baseMetadata,warning:'未能可靠找到名片四邊，請手動裁切；不會呼叫 AI 進行裁切。'}};
     const completeness=assessCardCompleteness(found.points,analysisCanvas.width,analysisCanvas.height);
     if(completeness.boundaryTouch||completeness.score<CARD_IMAGE_THRESHOLDS.completeness)return {file:null,metadata:{...baseMetadata,detection:{...baseMetadata.detection,confidence:Math.min(found.confidence,.69)},warning:'名片可能未完整入鏡或貼近照片邊界，請稍微拉遠後重新拍攝。'}};
