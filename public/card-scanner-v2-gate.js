@@ -1,4 +1,5 @@
-import { CARD_IMAGE_THRESHOLDS, processBusinessCardImage as scanBusinessCardImage } from './card-scanner-v2.js';
+import { CARD_IMAGE_THRESHOLDS } from './card-scanner-v2.js';
+import { processBusinessCardImage as scanBusinessCardImage } from './card-scanner-v2-runtime.js';
 
 function retakeError(message){
   const error=new Error(message);
@@ -55,7 +56,7 @@ function manualMetadata(base={}){
     ...base,
     detection:{detected:true,confidence:1},
     quality:{...quality,overall:Math.max(CARD_IMAGE_THRESHOLDS.quality,Number(quality.overall)||0)},
-    processing:{...(base.processing||{}),perspectiveCorrected:false,cropped:true,manualCorrection:true},
+    processing:{...(base.processing||{}),perspectiveCorrected:false,cropped:true,manualCorrection:true,resolutionNormalized:true},
     warning:'自動定位未通過，已由使用者手動確認裁切範圍；沒有使用 AI 裁切。',
   };
 }
