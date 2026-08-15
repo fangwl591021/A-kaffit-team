@@ -36,6 +36,7 @@ test('high-resolution original upload is reduced before R2 while small images ar
   assert.match(upload,/normalizeWorkingSource/);
   assert.match(upload,/workingLongEdge:CARD_SCANNER_RESOLUTION\.workingLongEdge/);
   assert.match(upload,/normalized\.working\.width===normalized\.input\.width/);
+  assert.match(upload,/business-card-working\.webp/);
   assert.match(upload,/x-card-resolution-normalized/);
 });
 
