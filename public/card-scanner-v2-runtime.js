@@ -73,6 +73,18 @@ function normalizedCorners(points,width,height){
   return points.map((point)=>({x:clamp(point.x/width,0,1),y:clamp(point.y/height,0,1)}));
 }
 function releaseCanvas(canvas){if(canvas){canvas.width=1;canvas.height=1;}}
+function detectionMetadata(found){
+  return {
+    detected:Boolean(found),
+    confidence:Number(found?.confidence||0),
+    strategy:found?.strategy||'',
+    edgeSupport:Number(found?.edgeSupport||0),
+    rawContentDensity:Number(found?.rawContentDensity||0),
+    contentDensity:Number(found?.contentDensity||0),
+    contentFit:Number(found?.contentFit||0),
+    surfaceConsistency:Number(found?.surfaceConsistency||0),
+  };
+}
 
 export async function processBusinessCardImage(file){
   if(!(file instanceof Blob)||!file.size)throw new Error('找不到名片圖片');
@@ -91,7 +103,7 @@ export async function processBusinessCardImage(file){
       original:{width:plan.input.width,height:plan.input.height},
       working:{width:plan.working.width,height:plan.working.height},
       analysis:{width:plan.analysis.width,height:plan.analysis.height},
-      detection:{detected:Boolean(found),confidence:Number(found?.confidence||0),strategy:found?.strategy||''},
+      detection:detectionMetadata(found),
       card:{orientation:'',rotation:0},quality,
       processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},
       corners:found?normalizedCorners(found.points,analysisCanvas.width,analysisCanvas.height):[],warning:'',
