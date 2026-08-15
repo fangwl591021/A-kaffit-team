@@ -6,7 +6,9 @@ on:
       - agent/card-scanner-v2
     paths:
       - scripts/apply-card-vision-v3-stability.mjs
+      - scripts/apply-card-duplicate-retry.mjs
       - test/card-vision-v3-stability.test.js
+      - test/card-duplicate-retry.test.js
       - .github/workflows/apply-card-vision-localization-v3.yml
 
 permissions:
@@ -23,8 +25,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply stability patch
-        run: node scripts/apply-card-vision-v3-stability.mjs
+      - name: Apply patches
+        run: |
+          node scripts/apply-card-vision-v3-stability.mjs
+          node scripts/apply-card-duplicate-retry.mjs
       - name: Install dependencies
         run: npm ci
       - name: Test
@@ -61,6 +65,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/app-20260815-132.js test/card-vision-v3-stability.test.js
-          git commit -m "fix: harden Vision V3 card crop stability"
+          git add public/app-20260815-132.js src/card-collection.js src/index.js \
+            test/card-vision-v3-stability.test.js test/card-duplicate-retry.test.js
+          git commit -m "fix: allow duplicate card rescans without duplicate points"
           git push origin HEAD:agent/card-scanner-v2
