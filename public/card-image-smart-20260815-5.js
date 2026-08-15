@@ -6,6 +6,6 @@ export {
   expandCardQuad,
   orderQuad,
   perspectiveCoefficients,
-  processBusinessCardImage,
   warpPerspective,
 } from './card-scanner-v2.js';
+export { processBusinessCardImage } from './card-scanner-v2-gate.js';
