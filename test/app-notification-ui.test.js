@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const notify = readFileSync(new URL('../public/app-notify.js', import.meta.url), 'utf8');
 const index = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+const app = readFileSync(new URL('../public/app-20260815-132.js', import.meta.url), 'utf8');
 
 test('notification layer loads before the main app bundle', () => {
   const notifyIndex = index.indexOf('/app-notify.js');
@@ -20,8 +21,13 @@ test('legacy alert calls are globally routed to in-app notice UI', () => {
   assert.match(notify, /操作完成/);
 });
 
-test('notification UI provides a reusable async confirm dialog without browser chrome', () => {
+test('confirm and prompt use reusable in-app dialogs without browser chrome', () => {
   assert.match(notify, /window\.appConfirm/);
-  assert.match(notify, /kind:'confirm'/);
+  assert.match(notify, /window\.appPrompt/);
+  assert.match(notify, /ak-notify-input/);
   assert.doesNotMatch(notify, /location\.hostname|document\.domain/);
+  assert.doesNotMatch(app, /\bconfirm\s*\(/);
+  assert.doesNotMatch(app, /\bprompt\s*\(/);
+  assert.match(app, /await appConfirm\(/);
+  assert.match(app, /await appPrompt\(/);
 });
