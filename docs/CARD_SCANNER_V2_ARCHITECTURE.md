@@ -1,8 +1,8 @@
 # A-KAFFIT Card Scanner V2 技術規格
 
-版本：V2.1 Draft  
+版本：V2.2 Draft  
 分支：`agent/card-scanner-v2`  
-狀態：Phase A 已完成接線，尚未部署正式環境。  
+狀態：Phase A 完成；Phase B Scanner Lab 已加入，待 staging 實機驗證。  
 目標：以低成本、低延遲、低記憶體消耗方式完成名片拍攝、裁切、透視補正、品質檢查與 OCR 前置處理。
 
 ## 1. 核心原則
@@ -14,6 +14,7 @@
 5. OCR 與裁切解耦；OCR 只接受已完成裁切的最終圖片。
 6. 禁止生成式補圖、猜字、補 Logo、補不存在的名片邊界或聯絡資料。
 7. 高解析手機照片在送 R2 前先降到 Working Image，避免只降低運算量卻仍傳送 12MP/48MP 原圖。
+8. Phase B 實拍驗證必須先使用 zero-token Scanner Lab，不應為了調裁切門檻反覆消耗 OCR。
 
 ## 2. 正式流程
 
@@ -131,6 +132,15 @@ Analysis Image：長邊 1280px
 - 同步更新 `content-type`、`x-card-file-size`、`x-card-resolution-normalized`。
 - 不影響其他 fetch。
 
+### `card-scanner-v2-lab.html`
+
+- Phase B 實拍驗證入口。
+- 完全本機運算，不上傳圖片、不呼叫 OCR、不使用 AI token。
+- 顯示：自動 / 人工 / 重拍判定、四邊信心、整體品質、清晰度、亮度、反光分數、Working / Analysis 尺寸。
+- 將偵測到的四角畫在原圖預覽上。
+- 自動補正成功時顯示 Final Image。
+- 測試完成後不保存圖片。
+
 ### `card-image-smart-20260815-5.js`
 
 相容層：既有 `app.js` 不需大規模重寫，仍使用原函式名稱，但實際處理由 Card Scanner V2 接管。
@@ -188,7 +198,7 @@ Analysis Image：長邊 1280px
 
 ### 0 token
 
-解析度縮小、四邊/四角、完整性、模糊/亮度/反光、Perspective Warp、人工 Cropper。
+解析度縮小、四邊/四角、完整性、模糊/亮度/反光、Perspective Warp、人工 Cropper、Scanner Lab。
 
 ### 必要 AI
 
@@ -205,6 +215,7 @@ CRM、五大標籤、公司資料補全、公開資料搜尋；不得阻塞名�
 - Final OCR Image 可另存 processed image。
 - Analysis Image 永不保存。
 - 不完整 / 垃圾圖不得成為正式名片素材。
+- Scanner Lab 不使用 R2。
 
 ## 12. 狀態機
 
@@ -277,21 +288,47 @@ scanning
 - 人工 Cropper 來源長邊最大 2200px。
 - Canvas / Object URL / ImageBitmap 完成後釋放。
 
-## 15. 上線策略
+## 15. Phase B Scanner Lab 驗證流程
+
+測試頁：`/card-scanner-v2-lab.html`
+
+每張照片記錄：
+
+- 裝置 / OS / LINE 版本。
+- 拍照或相簿。
+- 原圖像素尺寸。
+- Working / Analysis 尺寸。
+- 判定：auto / manual / retake。
+- 四邊 confidence。
+- blur / brightness / glare / overall。
+- 四角 overlay 是否落在真實名片四角。
+- 自動輸出是否完整、是否過度裁切。
+
+第一輪至少 20 張，建議：
+
+- 手持 5 張。
+- 桌放 5 張。
+- 斜拍 4 張。
+- 故意缺邊 3 張。
+- 故意模糊 / 反光 / 過暗 3 張。
+
+第一輪 Scanner Lab 不進 OCR；只有幾何與品質門檻穩定後，才進完整 staging OCR 驗證。
+
+## 16. 上線策略
 
 ### Phase A：完成
 
 已完成：resolution、geometry、runtime、OCR gate、manual fallback、pre-upload normalizer、相容層、契約測試與主規格文件。尚未部署 production。
 
-### Phase B：下一步
+### Phase B：進行中
 
-Staging 實拍 Android / iPhone：手拿、桌放、斜拍、背景複雜、故意缺邊、故意模糊、12MP / 48MP。
+已加入 zero-token Scanner Lab；下一步部署 staging，Android / iPhone 實拍手拿、桌放、斜拍、背景複雜、故意缺邊、故意模糊、12MP / 48MP。
 
 ### Phase C
 
 Staging 實拍達標後才允許合併正式分支。
 
-## 16. 不可退回的舊設計
+## 17. 不可退回的舊設計
 
 後續任何 AI / Codex 接手都不得重新加入：
 
