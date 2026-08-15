@@ -1,4 +1,4 @@
-import { CARD_SCANNER_RESOLUTION, canvasToCardFile, normalizeCardSource } from './card-scanner-v2-resolution.js';
+import { CARD_SCANNER_RESOLUTION, canvasToCardFile, normalizeWorkingSource } from './card-scanner-v2-resolution.js';
 
 const browser=typeof window!=='undefined'&&typeof window.fetch==='function';
 const originalFetch=browser?window.fetch.bind(window):null;
@@ -12,12 +12,12 @@ function isCardImageUpload(input,init={}){
 }
 
 async function normalizedUploadBody(file){
-  const {workingCanvas,plan}=await normalizeCardSource(file,{workingLongEdge:CARD_SCANNER_RESOLUTION.workingLongEdge,analysisLongEdge:CARD_SCANNER_RESOLUTION.analysisLongEdge});
+  const normalized=await normalizeWorkingSource(file,{workingLongEdge:CARD_SCANNER_RESOLUTION.workingLongEdge});
   try{
-    if(plan.working.width===plan.input.width&&plan.working.height===plan.input.height)return file;
-    return await canvasToCardFile(workingCanvas,'business-card-working.webp',.88);
+    if(normalized.working.width===normalized.input.width&&normalized.working.height===normalized.input.height)return file;
+    return await canvasToCardFile(normalized.workingCanvas,'business-card-working.webp',.88);
   }finally{
-    workingCanvas.width=1;workingCanvas.height=1;
+    normalized.workingCanvas.width=1;normalized.workingCanvas.height=1;
   }
 }
 
