@@ -51,3 +51,13 @@ test('manual crop is final authority, uses working resolution and incomplete pho
   assert.match(gate,/不會把這張圖送給 AI OCR/);
   assert.doesNotMatch(gate,/fetch\(/);
 });
+
+test('phase B lab is a zero-token local-only diagnostic surface',()=>{
+  const lab=source('public/card-scanner-v2-lab.html');
+  assert.match(lab,/Card Scanner V2 Lab/);
+  assert.match(lab,/processBusinessCardImage/);
+  assert.match(lab,/四邊信心/);
+  assert.match(lab,/建議重新拍攝/);
+  assert.doesNotMatch(lab,/fetch\(/);
+  assert.doesNotMatch(lab,/\/recognize/);
+});
