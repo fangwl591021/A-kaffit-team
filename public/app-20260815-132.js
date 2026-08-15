@@ -2078,25 +2078,36 @@ function normalizedVisionLocalization(value={}){
 }
 async function cropByVisionLocalization(file,rawLocalization){
   const localization=normalizedVisionLocalization(rawLocalization);
-  if(!file||!localization.detected||localization.incomplete||localization.cropConfidence<0.55)return null;
+  if(!file||!localization.detected||localization.incomplete||localization.cropConfidence<0.72)return null;
   const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'}).catch(()=>createImageBitmap(file));
   try{
     const scale=Math.min(1,2200/Math.max(bitmap.width,bitmap.height));
     const source=document.createElement('canvas');source.width=Math.max(1,Math.round(bitmap.width*scale));source.height=Math.max(1,Math.round(bitmap.height*scale));source.getContext('2d',{alpha:false}).drawImage(bitmap,0,0,source.width,source.height);
     let output=null;
     if(localization.corners.length===4){
-      const points=orderQuad(localization.corners.map(p=>({x:p.x*source.width,y:p.y*source.height})));
+      const rawPoints=orderQuad(localization.corners.map(p=>({x:p.x*source.width,y:p.y*source.height})));
+      const center=rawPoints.reduce((acc,p)=>({x:acc.x+p.x/4,y:acc.y+p.y/4}),{x:0,y:0});
+      const padFactor=1.025;
+      const points=rawPoints.map(p=>({
+        x:Math.max(0,Math.min(source.width-1,center.x+(p.x-center.x)*padFactor)),
+        y:Math.max(0,Math.min(source.height-1,center.y+(p.y-center.y)*padFactor)),
+      }));
       const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
       const widthEstimate=(dist(points[0],points[1])+dist(points[3],points[2]))/2;
       const heightEstimate=(dist(points[0],points[3])+dist(points[1],points[2]))/2;
-      const ratio=Math.max(.45,Math.min(2.2,widthEstimate/Math.max(1,heightEstimate)));
-      const long=Math.min(1600,Math.max(900,Math.round(Math.max(widthEstimate,heightEstimate))));
+      const rawRatio=widthEstimate/Math.max(1,heightEstimate);
+      if(rawRatio<.42||rawRatio>2.4||Math.min(widthEstimate,heightEstimate)<80)return null;
+      const ratio=Math.max(.45,Math.min(2.2,rawRatio));
+      const long=Math.min(1600,Math.max(1,Math.round(Math.max(widthEstimate,heightEstimate))));
       const width=ratio>=1?long:Math.round(long*ratio),height=ratio>=1?Math.round(long/ratio):long;
       output=warpPerspective(source,points,width,height);
     }
     if(!output){
-      const b=localization.boundingBox,x=Math.round(b.x*source.width),y=Math.round(b.y*source.height),w=Math.round(b.width*source.width),h=Math.round(b.height*source.height);
-      if(w<50||h<30)return null;
+      const b=localization.boundingBox;
+      const padX=b.width*.015,padY=b.height*.015;
+      const left=Math.max(0,b.x-padX),top=Math.max(0,b.y-padY),right=Math.min(1,b.x+b.width+padX),bottom=Math.min(1,b.y+b.height+padY);
+      const x=Math.round(left*source.width),y=Math.round(top*source.height),w=Math.round((right-left)*source.width),h=Math.round((bottom-top)*source.height);
+      if(w<80||h<50)return null;
       output=document.createElement('canvas');output.width=w;output.height=h;output.getContext('2d',{alpha:false}).drawImage(source,x,y,w,h,0,0,w,h);
     }
     const blob=await new Promise(resolve=>output.toBlob(resolve,'image/webp',.9));
