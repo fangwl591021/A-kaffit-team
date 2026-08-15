@@ -10,6 +10,14 @@ test('compatibility layer installs upload normalization and routes OCR through g
   assert.match(compat,/processBusinessCardImage.*card-scanner-v2-gate\.js/);
 });
 
+test('existing app keeps the stable scan UI while V2 controls processing underneath',()=>{
+  const app=source('public/app.js');
+  assert.match(app,/from "\/card-image-smart-20260815-5\.js"/);
+  assert.match(app,/prepareBusinessCardImage/);
+  assert.match(app,/processBusinessCardImage\(file\)/);
+  assert.match(app,/uploadCardImageOriginal\(file,sideLabel,purpose\)/);
+});
+
 test('runtime uses working and analysis resolution plans before perspective correction',()=>{
   const runtime=source('public/card-scanner-v2-runtime.js');
   assert.match(runtime,/normalizeCardSource/);
