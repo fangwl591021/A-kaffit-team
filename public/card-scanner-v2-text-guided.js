@@ -9,107 +9,144 @@ function gray(imageData){
 function percentile(values,r){
   if(!values.length)return 0;const sorted=[...values].sort((a,b)=>a-b);return sorted[Math.min(sorted.length-1,Math.floor((sorted.length-1)*r))];
 }
-function localContrast(gray,width,height){
-  const score=new Uint8Array(gray.length),samples=[];
+
+// Build a local high-frequency activity map. This detects "there is text / QR / logo here"
+// without reading any text and without any network/OCR call.
+function activityMap(gray,width,height){
+  const strength=new Uint8Array(gray.length),samples=[];
   for(let y=2;y<height-2;y++)for(let x=2;x<width-2;x++){
-    const i=y*width+x,c=gray[i];
-    const v=Math.max(Math.abs(c-gray[i-1]),Math.abs(c-gray[i+1]),Math.abs(c-gray[i-width]),Math.abs(c-gray[i+width]),Math.abs(c-gray[i-width-1]),Math.abs(c-gray[i+width+1]));
-    if((x+y)%7===0)samples.push(v);
+    const i=y*width+x;
+    const gx=Math.abs(gray[i-1]-gray[i+1])+Math.abs(gray[i-width-1]-gray[i-width+1])+Math.abs(gray[i+width-1]-gray[i+width+1]);
+    const gy=Math.abs(gray[i-width]-gray[i+width])+Math.abs(gray[i-width-1]-gray[i+width-1])+Math.abs(gray[i-width+1]-gray[i+width+1]);
+    const value=Math.min(255,Math.round((gx+gy)/3));
+    if((x+y)%9===0)samples.push(value);
+    strength[i]=value;
   }
-  const threshold=clamp(percentile(samples,.78),20,62);
-  for(let y=2;y<height-2;y++)for(let x=2;x<width-2;x++){
-    const i=y*width+x,c=gray[i];
-    const v=Math.max(Math.abs(c-gray[i-1]),Math.abs(c-gray[i+1]),Math.abs(c-gray[i-width]),Math.abs(c-gray[i+width]),Math.abs(c-gray[i-width-1]),Math.abs(c-gray[i+width+1]));
-    if(v>=threshold)score[i]=1;
-  }
-  return score;
+  const threshold=clamp(percentile(samples,.76),18,58),mask=new Uint8Array(gray.length);
+  for(let i=0;i<strength.length;i++)if(strength[i]>=threshold)mask[i]=1;
+  return {mask,strength,threshold};
 }
-function components(mask,width,height){
-  const visited=new Uint8Array(mask.length),queue=new Int32Array(mask.length),result=[];
-  for(let start=0;start<mask.length;start++){
-    if(!mask[start]||visited[start])continue;
-    let head=0,tail=0;queue[tail++]=start;visited[start]=1;let minX=width,minY=height,maxX=0,maxY=0,count=0;
-    while(head<tail){
-      const i=queue[head++],x=i%width,y=Math.floor(i/width);count++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
-      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
-        if(!dx&&!dy)continue;const xx=x+dx,yy=y+dy;if(xx<0||xx>=width||yy<0||yy>=height)continue;const ni=yy*width+xx;if(mask[ni]&&!visited[ni]){visited[ni]=1;queue[tail++]=ni;}
-      }
+
+function smooth1d(values,radius){
+  const out=new Float32Array(values.length),prefix=new Float64Array(values.length+1);
+  for(let i=0;i<values.length;i++)prefix[i+1]=prefix[i]+values[i];
+  for(let i=0;i<values.length;i++){
+    const a=Math.max(0,i-radius),b=Math.min(values.length,i+radius+1);
+    out[i]=(prefix[b]-prefix[a])/(b-a);
+  }
+  return out;
+}
+
+// Convert local activity into horizontal text bands. Long desk edges do not create a dense
+// sequence of short high-frequency features, while business-card text usually does.
+function textBands(mask,width,height){
+  const rows=new Float32Array(height);
+  for(let y=0;y<height;y++){
+    let hits=0,runs=0,inRun=false;
+    for(let x=0;x<width;x++){
+      const on=mask[y*width+x]===1;
+      if(on){hits++;if(!inRun){runs++;inRun=true;}}
+      else inRun=false;
     }
-    const w=maxX-minX+1,h=maxY-minY+1,area=w*h;
-    if(count<3||area<=0)continue;
-    result.push({minX,minY,maxX,maxY,width:w,height:h,count,fill:count/area});
+    // Favor rows with many separated strokes, not one long border.
+    rows[y]=(hits/Math.max(1,width))*.45+Math.min(1,runs/28)*.55;
   }
-  return result;
-}
-function likelyContentBlocks(imageData){
-  const {width,height}=imageData,g=gray(imageData),mask=localContrast(g,width,height);
-  const minDim=Math.min(width,height);
-  return components(mask,width,height).filter((c)=>{
-    const wr=c.width/width,hr=c.height/height;
-    const smallGlyph=wr>=.002&&wr<=.18&&hr>=.002&&hr<=.12;
-    const qrLike=wr>=.025&&wr<=.22&&hr>=.025&&hr<=.22&&c.fill>=.12;
-    return (smallGlyph||qrLike)&&c.width>=2&&c.height>=2&&c.width<minDim*.28&&c.height<minDim*.28;
-  });
-}
-function mergeNearbyBlocks(blocks,width,height){
-  if(!blocks.length)return [];
-  const used=new Uint8Array(blocks.length),groups=[];
-  for(let i=0;i<blocks.length;i++){
-    if(used[i])continue;used[i]=1;const group=[blocks[i]];let changed=true;
-    while(changed){changed=false;
-      const box={minX:Math.min(...group.map(b=>b.minX)),minY:Math.min(...group.map(b=>b.minY)),maxX:Math.max(...group.map(b=>b.maxX)),maxY:Math.max(...group.map(b=>b.maxY))};
-      for(let j=0;j<blocks.length;j++){
-        if(used[j])continue;const b=blocks[j];
-        const gapX=Math.max(0,Math.max(box.minX-b.maxX,b.minX-box.maxX));
-        const gapY=Math.max(0,Math.max(box.minY-b.maxY,b.minY-box.maxY));
-        if(gapX<=width*.035&&gapY<=height*.03){used[j]=1;group.push(b);changed=true;}
-      }
+  const smoothed=smooth1d(rows,Math.max(2,Math.round(height*.004)));
+  const samples=[...smoothed].filter(v=>v>0),cut=clamp(percentile(samples,.58),.025,.16);
+  const bands=[];let start=-1,peak=0;
+  for(let y=0;y<=height;y++){
+    const active=y<height&&smoothed[y]>=cut;
+    if(active&&start<0){start=y;peak=smoothed[y];}
+    else if(active)peak=Math.max(peak,smoothed[y]);
+    else if(start>=0){
+      const end=y-1,h=end-start+1;
+      if(h>=2&&h<=height*.12)bands.push({start,end,peak,height:h});
+      start=-1;peak=0;
     }
-    const minX=Math.min(...group.map(b=>b.minX)),minY=Math.min(...group.map(b=>b.minY)),maxX=Math.max(...group.map(b=>b.maxX)),maxY=Math.max(...group.map(b=>b.maxY));
-    groups.push({minX,minY,maxX,maxY,width:maxX-minX+1,height:maxY-minY+1,count:group.length});
   }
-  return groups;
+  return bands;
 }
-function groupCluster(groups,width,height){
-  const useful=groups.filter(g=>g.count>=2||g.width>=width*.035||g.height>=height*.035);
-  if(!useful.length)return null;
-  useful.sort((a,b)=>b.count-a.count||b.width*b.height-a.width*a.height);
-  const seed=useful[0],picked=[seed];
-  for(const g of useful.slice(1)){
-    const minX=Math.min(...picked.map(x=>x.minX)),minY=Math.min(...picked.map(x=>x.minY)),maxX=Math.max(...picked.map(x=>x.maxX)),maxY=Math.max(...picked.map(x=>x.maxY));
-    const gapX=Math.max(0,Math.max(minX-g.maxX,g.minX-maxX)),gapY=Math.max(0,Math.max(minY-g.maxY,g.minY-maxY));
-    if(gapX<=width*.18&&gapY<=height*.15)picked.push(g);
+
+function bandHorizontalExtent(mask,width,height,band){
+  const cols=new Uint16Array(width);
+  for(let y=band.start;y<=band.end;y++)for(let x=0;x<width;x++)if(mask[y*width+x])cols[x]++;
+  const threshold=Math.max(1,Math.floor(band.height*.12));
+  let minX=width,maxX=-1;
+  for(let x=0;x<width;x++)if(cols[x]>=threshold){minX=Math.min(minX,x);maxX=Math.max(maxX,x);}
+  return maxX>=minX?{minX,maxX,width:maxX-minX+1}:null;
+}
+
+function clusterBands(mask,width,height,bands){
+  const enriched=bands.map(b=>({...b,...(bandHorizontalExtent(mask,width,height,b)||{})})).filter(b=>Number.isFinite(b.minX)&&b.width>=width*.04);
+  if(enriched.length<2)return null;
+  // Build vertical groups of text rows. Business cards typically have several rows close together.
+  const groups=[];let current=[];
+  for(const band of enriched.sort((a,b)=>a.start-b.start)){
+    if(!current.length){current=[band];continue;}
+    const last=current[current.length-1],gap=band.start-last.end;
+    if(gap<=height*.065)current.push(band);
+    else{if(current.length>=2)groups.push(current);current=[band];}
   }
-  const minX=Math.min(...picked.map(g=>g.minX)),minY=Math.min(...picked.map(g=>g.minY)),maxX=Math.max(...picked.map(g=>g.maxX)),maxY=Math.max(...picked.map(g=>g.maxY));
-  const boxW=maxX-minX+1,boxH=maxY-minY+1;
-  if(boxW<width*.14||boxH<height*.07)return null;
-  return {minX,minY,maxX,maxY,width:boxW,height:boxH,groups:picked.length,blocks:picked.reduce((s,g)=>s+g.count,0)};
-}
-function expandContentBox(box,width,height){
-  const candidates=[];
-  const orientations=['landscape','portrait'];
-  for(const orientation of orientations){
-    const targetAspect=1.667;
-    const contentW=box.width,contentH=box.height;
-    const margins=[.06,.09,.12,.16,.20,.25];
-    for(const mx of margins)for(const my of margins){
-      let w=contentW/(1-2*mx),h=contentH/(1-2*my);
-      if(orientation==='landscape'){
-        const desired=Math.max(w,h*targetAspect);w=desired;h=desired/targetAspect;
-      }else{
-        const desired=Math.max(h,w*targetAspect);h=desired;w=desired/targetAspect;
-      }
-      const cx=(box.minX+box.maxX)/2,cy=(box.minY+box.maxY)/2;
-      const left=cx-w/2,right=cx+w/2,top=cy-h/2,bottom=cy+h/2;
-      if(left<0||top<0||right>=width||bottom>=height)continue;
-      const contentArea=box.width*box.height,cardArea=w*h;
-      const contentOccupancy=contentArea/Math.max(1,cardArea);
-      if(contentOccupancy<.12||contentOccupancy>.78)continue;
-      candidates.push({points:[{x:left,y:top},{x:right,y:top},{x:right,y:bottom},{x:left,y:bottom}],contentOccupancy,orientation});
+  if(current.length>=2)groups.push(current);
+  if(!groups.length)return null;
+  const scored=groups.map(group=>{
+    const minX=Math.min(...group.map(b=>b.minX)),maxX=Math.max(...group.map(b=>b.maxX)),minY=group[0].start,maxY=group[group.length-1].end;
+    const w=maxX-minX+1,h=maxY-minY+1;
+    const spreadX=w/width,spreadY=h/height;
+    const rowCount=group.length;
+    const peak=group.reduce((s,b)=>s+b.peak,0)/rowCount;
+    // Prefer broad, multi-row groups; this suppresses isolated screen labels or AMD badges.
+    const score=Math.min(1,rowCount/6)*.38+clamp(spreadX/.55,0,1)*.30+clamp(spreadY/.26,0,1)*.20+clamp(peak/.35,0,1)*.12;
+    return {minX,minY,maxX,maxY,width:w,height:h,rowCount,score};
+  }).filter(g=>g.width>=width*.18&&g.height>=height*.055);
+  scored.sort((a,b)=>b.score-a.score);
+  if(!scored.length)return null;
+  const primary=scored[0];
+  // Merge nearby secondary text group only if it strongly overlaps horizontally. This lets
+  // company/name rows join address/contact rows while avoiding unrelated screen text.
+  for(const g of scored.slice(1)){
+    const overlap=Math.max(0,Math.min(primary.maxX,g.maxX)-Math.max(primary.minX,g.minX));
+    const overlapRatio=overlap/Math.max(1,Math.min(primary.width,g.width));
+    const gap=Math.max(0,Math.max(primary.minY-g.maxY,g.minY-primary.maxY));
+    if(overlapRatio>=.28&&gap<=height*.13){
+      primary.minX=Math.min(primary.minX,g.minX);primary.maxX=Math.max(primary.maxX,g.maxX);
+      primary.minY=Math.min(primary.minY,g.minY);primary.maxY=Math.max(primary.maxY,g.maxY);
+      primary.width=primary.maxX-primary.minX+1;primary.height=primary.maxY-primary.minY+1;primary.rowCount+=g.rowCount;
     }
+  }
+  return primary;
+}
+
+function buildAsymmetricCandidates(box,width,height){
+  const candidates=[],targetAspect=1.667;
+  // Independent margins are intentional: business-card text is often left/top biased.
+  const leftPads=[.035,.06,.09,.13],rightPads=[.035,.06,.10,.15,.21],topPads=[.035,.06,.10,.15],bottomPads=[.04,.07,.11,.16,.22];
+  for(const lp of leftPads)for(const rp of rightPads)for(const tp of topPads)for(const bp of bottomPads){
+    const left=box.minX-width*lp,right=box.maxX+width*rp,top=box.minY-height*tp,bottom=box.maxY+height*bp;
+    if(left<1||top<1||right>=width-1||bottom>=height-1)continue;
+    let w=right-left,h=bottom-top;
+    if(w<=0||h<=0)continue;
+    const current=w/h;
+    // Expand only outward to reach a business-card aspect. Never shrink the detected content box.
+    let l=left,r=right,t=top,b=bottom;
+    if(current<targetAspect){
+      const need=h*targetAspect-w;
+      // Bias extra width toward the side with more existing whitespace.
+      const leftRoom=l,rightRoom=width-r,total=Math.max(1,leftRoom+rightRoom);
+      const addL=need*(leftRoom/total),addR=need-addL;l-=addL;r+=addR;
+    }else if(current>targetAspect){
+      const need=w/targetAspect-h;
+      const topRoom=t,bottomRoom=height-b,total=Math.max(1,topRoom+bottomRoom);
+      const addT=need*(topRoom/total),addB=need-addT;t-=addT;b+=addB;
+    }
+    if(l<1||t<1||r>=width-1||b>=height-1)continue;
+    const cardArea=(r-l)*(b-t),contentArea=box.width*box.height,occupancy=contentArea/Math.max(1,cardArea);
+    if(occupancy<.12||occupancy>.72)continue;
+    candidates.push({points:[{x:l,y:t},{x:r,y:t},{x:r,y:b},{x:l,y:b}],contentOccupancy:occupancy,orientation:'landscape'});
   }
   return candidates;
 }
+
 function edgeEvidence(imageData,points){
   const {width,height}=imageData,g=gray(imageData);let total=0,hits=0;
   for(let e=0;e<4;e++){
@@ -126,7 +163,7 @@ function edgeEvidence(imageData,points){
   return hits/Math.max(1,total);
 }
 function surfaceScore(imageData,points){
-  const {width,height,data}=imageData;const xs=points.map(p=>p.x),ys=points.map(p=>p.y),minX=Math.max(0,Math.floor(Math.min(...xs))),maxX=Math.min(width-1,Math.ceil(Math.max(...xs))),minY=Math.max(0,Math.floor(Math.min(...ys))),maxY=Math.min(height-1,Math.ceil(Math.max(...ys)));
+  const {width,height,data}=imageData,xs=points.map(p=>p.x),ys=points.map(p=>p.y),minX=Math.max(0,Math.floor(Math.min(...xs))),maxX=Math.min(width-1,Math.ceil(Math.max(...xs))),minY=Math.max(0,Math.floor(Math.min(...ys))),maxY=Math.min(height-1,Math.ceil(Math.max(...ys)));
   const cells=[];for(let gy=0;gy<4;gy++)for(let gx=0;gx<6;gx++){
     let sum=0,count=0;const x0=Math.floor(minX+(maxX-minX)*gx/6),x1=Math.floor(minX+(maxX-minX)*(gx+1)/6),y0=Math.floor(minY+(maxY-minY)*gy/4),y1=Math.floor(minY+(maxY-minY)*(gy+1)/4);
     for(let y=y0;y<y1;y+=3)for(let x=x0;x<x1;x+=3){const i=(y*width+x)*4;sum+=data[i]*.299+data[i+1]*.587+data[i+2]*.114;count++;}
@@ -138,15 +175,16 @@ function surfaceScore(imageData,points){
 
 export function detectTextGuidedCard(imageData){
   const {width,height}=imageData;if(width<180||height<180)return null;
-  const blocks=likelyContentBlocks(imageData),groups=mergeNearbyBlocks(blocks,width,height),cluster=groupCluster(groups,width,height);
-  if(!cluster)return null;
-  const candidates=expandContentBox(cluster,width,height).map(c=>{
+  const g=gray(imageData),activity=activityMap(g,width,height),bands=textBands(activity.mask,width,height),contentBox=clusterBands(activity.mask,width,height,bands);
+  if(!contentBox)return null;
+  const candidates=buildAsymmetricCandidates(contentBox,width,height).map(c=>{
     const edge=edgeEvidence(imageData,c.points),surface=surfaceScore(imageData,c.points);
-    const occupancyScore=clamp(1-Math.abs(c.contentOccupancy-.38)/.32,0,1);
-    const confidence=clamp(.42*occupancyScore+.34*edge+.24*surface,0,1);
-    return {...c,edgeSupport:Number(edge.toFixed(3)),surfaceConsistency:Number(surface.toFixed(3)),contentDensity:Number(c.contentOccupancy.toFixed(3)),contentFit:Number(occupancyScore.toFixed(3)),confidence:Number(confidence.toFixed(3)),coverage:(c.points[1].x-c.points[0].x)*(c.points[3].y-c.points[0].y)/(width*height),strategy:'text-guided-v2.4',contentBox:cluster};
+    const occupancyScore=clamp(1-Math.abs(c.contentOccupancy-.36)/.30,0,1);
+    const rowScore=clamp(contentBox.rowCount/7,0,1);
+    const confidence=clamp(.34*occupancyScore+.28*edge+.20*surface+.18*rowScore,0,1);
+    return {...c,edgeSupport:Number(edge.toFixed(3)),surfaceConsistency:Number(surface.toFixed(3)),contentDensity:Number(c.contentOccupancy.toFixed(3)),contentFit:Number(occupancyScore.toFixed(3)),confidence:Number(confidence.toFixed(3)),coverage:(c.points[1].x-c.points[0].x)*(c.points[3].y-c.points[0].y)/(width*height),strategy:'text-guided-v2.4.1',contentBox:{...contentBox,threshold:activity.threshold,bandCount:bands.length}};
   });
   candidates.sort((a,b)=>b.confidence-a.confidence||b.edgeSupport-a.edgeSupport);
   const best=candidates[0];
-  return best&&best.confidence>=.64?best:null;
+  return best&&best.confidence>=.58?best:null;
 }
