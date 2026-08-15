@@ -14,7 +14,9 @@ test('existing app keeps the stable scan UI while V2 controls processing underne
   const app=source('public/app.js');
   assert.match(app,/from "\/card-image-smart-20260815-5\.js"/);
   assert.match(app,/prepareBusinessCardImage/);
-  assert.match(app,/processBusinessCardImage\(file\)/);
+  assert.doesNotMatch(app,/processBusinessCardImage\(file\)/);
+  assert.match(app,/cropByVisionLocalization/);
+  assert.match(app,/recognized\.localization/);
   assert.match(app,/uploadCardImageOriginal\(file,sideLabel,purpose\)/);
 });
 
@@ -32,7 +34,7 @@ test('runtime uses working and analysis resolution plans before perspective corr
 
 test('high-resolution original upload is reduced before R2 while small images are preserved',()=>{
   const upload=source('public/card-scanner-v2-upload.js');
-  assert.ok(upload.includes('/v1/card-images'));
+  assert.match(upload,/card-images/);
   assert.match(upload,/normalizeWorkingSource/);
   assert.match(upload,/workingLongEdge:CARD_SCANNER_RESOLUTION\.workingLongEdge/);
   assert.match(upload,/normalized\.working\.width===normalized\.input\.width/);

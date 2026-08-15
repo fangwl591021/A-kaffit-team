@@ -1639,9 +1639,10 @@ async function app(request, env, ctx) {
     try{
       const cardId=decodeURIComponent(contactManualCropMatch[1]);
       const form=await request.formData();
-      const saved=await saveContactManualCrop(env.DB,env.MEDIA,member.userId,cardId,form.get("image"));
-      scheduleContactCardReverification(env,ctx,member.userId,cardId);
-      return json({success:true,status:"processing",manualCrop:true,eventId:saved.eventId},202);
+      const skipReverify=request.headers.get("x-skip-reverify") === "1";
+      const saved=await saveContactManualCrop(env.DB,env.MEDIA,member.userId,cardId,form.get("image"),{reverify:!skipReverify});
+      if(!skipReverify)scheduleContactCardReverification(env,ctx,member.userId,cardId);
+      return json({success:true,status:skipReverify?"saved":"processing",manualCrop:true,eventId:saved.eventId},skipReverify?200:202);
     }catch(error){return badRequest(error.message || "手動裁切儲存失敗");}
   }
   const contactInsightRetryMatch = url.pathname.match(/^\/v1\/card-collection\/([^/]+)\/recalculate-insights$/);
