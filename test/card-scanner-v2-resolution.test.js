@@ -37,7 +37,11 @@ test('final output does not upscale low-resolution crops',()=>{
 
 test('working-only normalizer exists for upload and Cropper memory safety',()=>{
   const resolution=source('public/card-scanner-v2-resolution.js');
-  assert.match(resolution,/export async function normalizeWorkingSource/);
-  assert.match(resolution,/workingLongEdge=CARD_SCANNER_RESOLUTION\.workingLongEdge/);
-  assert.match(resolution,/if\(typeof source\.close==='function'\)source\.close\(\)/);
+  const start=resolution.indexOf('export async function normalizeWorkingSource');
+  const end=resolution.indexOf('export async function normalizeCardSource');
+  const block=resolution.slice(start,end);
+  assert.ok(start>=0&&end>start);
+  assert.match(block,/workingLongEdge=CARD_SCANNER_RESOLUTION\.workingLongEdge/);
+  assert.doesNotMatch(block,/analysisCanvas/);
+  assert.match(block,/source\.close/);
 });
