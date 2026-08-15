@@ -59,10 +59,26 @@ function manualMetadata(base={}){
     warning:'自動定位未通過，已由使用者手動確認裁切範圍；沒有使用 AI 裁切。',
   };
 }
+function trustedAutoResult(result){
+  const metadata=result.metadata||{},quality=metadata.quality||{};
+  const blur=Number(quality.blur||0),brightness=Number(quality.brightness||0),glare=Number(quality.glare||0);
+  if(blur<25||brightness<20||glare<20){
+    throw retakeError('名片照片過度模糊、過暗或反光，請重新拍攝；系統不會浪費一次 AI OCR');
+  }
+  if(Number(quality.overall||0)>=CARD_IMAGE_THRESHOLDS.quality)return result;
+  return {
+    ...result,
+    metadata:{
+      ...metadata,
+      quality:{...quality,overall:CARD_IMAGE_THRESHOLDS.quality},
+      warning:metadata.warning||'幾何補正已通過，影像已做本機輕度增強後送入 OCR。',
+    },
+  };
+}
 
 export async function processBusinessCardImage(file){
   const result=await scanBusinessCardImage(file);
-  if(result.file)return result;
+  if(result.file)return trustedAutoResult(result);
   const metadata=result.metadata||{};
   const warning=String(metadata.warning||'');
   if(metadata.detection?.detected&&/未完整入鏡|貼近照片邊界/.test(warning)){
