@@ -6,6 +6,7 @@ import {
   orderQuad,
   warpPerspective,
 } from './card-scanner-v2.js';
+import { detectLongBorderQuad } from './card-scanner-v2-border-fallback.js';
 import {
   CARD_SCANNER_RESOLUTION,
   analysisPointsToWorking,
@@ -83,12 +84,14 @@ export async function processBusinessCardImage(file){
   try{
     const analysisContext=analysisCanvas.getContext('2d',{willReadFrequently:true});
     const analysisImage=analysisContext.getImageData(0,0,analysisCanvas.width,analysisCanvas.height);
-    const quality=assessQuality(analysisImage),found=detectCardQuad(analysisImage);
+    const quality=assessQuality(analysisImage);
+    let found=detectCardQuad(analysisImage);
+    if(!found)found=detectLongBorderQuad(analysisImage);
     const baseMetadata={
       original:{width:plan.input.width,height:plan.input.height},
       working:{width:plan.working.width,height:plan.working.height},
       analysis:{width:plan.analysis.width,height:plan.analysis.height},
-      detection:{detected:Boolean(found),confidence:Number(found?.confidence||0)},
+      detection:{detected:Boolean(found),confidence:Number(found?.confidence||0),strategy:found?.strategy||''},
       card:{orientation:'',rotation:0},quality,
       processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},
       corners:found?normalizedCorners(found.points,analysisCanvas.width,analysisCanvas.height):[],warning:'',
@@ -97,7 +100,7 @@ export async function processBusinessCardImage(file){
 
     const completeness=assessCardCompleteness(found.points,analysisCanvas.width,analysisCanvas.height);
     if(completeness.boundaryTouch||completeness.score<CARD_IMAGE_THRESHOLDS.completeness){
-      return {file:null,metadata:{...baseMetadata,detection:{detected:true,confidence:Math.min(found.confidence,.69)},warning:'名片可能未完整入鏡或貼近照片邊界，請稍微拉遠後重新拍攝。'}};
+      return {file:null,metadata:{...baseMetadata,detection:{...baseMetadata.detection,confidence:Math.min(found.confidence,.69)},warning:'名片可能未完整入鏡或貼近照片邊界，請稍微拉遠後重新拍攝。'}};
     }
     if(found.confidence<CARD_IMAGE_THRESHOLDS.confidence){
       return {file:null,metadata:{...baseMetadata,warning:'已找到可能的名片邊界，但信心不足；請確認或手動裁切。'}};
@@ -116,7 +119,7 @@ export async function processBusinessCardImage(file){
     const landscape=outputSize.width>=outputSize.height;
     return {file:output,metadata:{
       ...baseMetadata,
-      detection:{detected:true,confidence:found.confidence},
+      detection:{...baseMetadata.detection,detected:true,confidence:found.confidence},
       card:{orientation:landscape?'landscape':'portrait',rotation:0},
       quality:{...quality,coverage:Math.round(found.coverage*100)},
       processing:{perspectiveCorrected:true,cropped:true,rotated:false,lightingEnhanced:true,manualCorrection:false,resolutionNormalized:true},
