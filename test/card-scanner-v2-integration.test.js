@@ -26,6 +26,8 @@ test('runtime uses working and analysis resolution plans before perspective corr
   assert.match(runtime,/analysisPointsToWorking/);
   assert.match(runtime,/finalOutputSize/);
   assert.match(runtime,/warpPerspective\(workingCanvas/);
+  assert.match(runtime,/releaseCanvas\(analysisCanvas\)/);
+  assert.match(runtime,/releaseCanvas\(workingCanvas\)/);
 });
 
 test('high-resolution original upload is reduced before R2 while small images are preserved',()=>{
@@ -37,10 +39,12 @@ test('high-resolution original upload is reduced before R2 while small images ar
   assert.match(upload,/x-card-resolution-normalized/);
 });
 
-test('manual crop is final authority and incomplete photos never reach OCR',()=>{
+test('manual crop is final authority, uses working resolution and incomplete photos never reach OCR',()=>{
   const gate=source('public/card-scanner-v2-gate.js');
   assert.match(gate,/CARD_RETAKE_REQUIRED/);
   assert.match(gate,/未完整入鏡|貼近照片邊界/);
+  assert.match(gate,/manualWorkingFile/);
+  assert.match(gate,/workingLongEdge:CARD_SCANNER_RESOLUTION\.workingLongEdge/);
   assert.match(gate,/manualCorrection:true/);
   assert.match(gate,/不會把這張圖送給 AI OCR/);
   assert.doesNotMatch(gate,/fetch\(/);
