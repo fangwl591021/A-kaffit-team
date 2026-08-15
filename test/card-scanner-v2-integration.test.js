@@ -22,7 +22,7 @@ test('runtime uses working and analysis resolution plans before perspective corr
 
 test('high-resolution original upload is reduced before R2 while small images are preserved',()=>{
   const upload=source('public/card-scanner-v2-upload.js');
-  assert.match(upload,/\/v1\\\/card-images/);
+  assert.ok(upload.includes('/v1/card-images'));
   assert.match(upload,/normalizeCardSource/);
   assert.match(upload,/workingLongEdge:CARD_SCANNER_RESOLUTION\.workingLongEdge/);
   assert.match(upload,/plan\.working\.width===plan\.input\.width/);
