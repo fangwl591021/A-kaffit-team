@@ -83,6 +83,8 @@ import {
   queueSystemCrmInsightBackfill,
   revokeContactShare,
   serveContactImage,
+  serveContactOriginalImage,
+  saveContactManualCrop,
   serveSharedContactImage,
   updateContact,
   verifyContactCardData,
@@ -914,6 +916,12 @@ async function app(request, env, ctx) {
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
     return serveContactImage(env.DB, env.MEDIA, request, member.userId, decodeURIComponent(contactImage[1]));
   }
+  const contactOriginalImage = url.pathname.match(/^\/v1\/card-collection\/([^/]+)\/original-image$/);
+  if (["GET", "HEAD"].includes(request.method) && contactOriginalImage) {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success:false, error:"Unauthorized" }, 401);
+    return serveContactOriginalImage(env.DB,env.MEDIA,request,member.userId,decodeURIComponent(contactOriginalImage[1]));
+  }
   const sharedContactImage = url.pathname.match(/^\/v1\/card-collection\/shared\/([A-Fa-f0-9]{48})\/image$/);
   if (["GET", "HEAD"].includes(request.method) && sharedContactImage) {
     return serveSharedContactImage(env.DB,env.MEDIA,request,sharedContactImage[1]);
@@ -1624,6 +1632,18 @@ async function app(request, env, ctx) {
     }
   }
 
+  const contactManualCropMatch = url.pathname.match(/^\/v1\/card-collection\/([^/]+)\/manual-crop$/);
+  if (request.method === "POST" && contactManualCropMatch) {
+    const member=await currentMember(request,env);
+    if(!member)return json({success:false,error:"Unauthorized"},401);
+    try{
+      const cardId=decodeURIComponent(contactManualCropMatch[1]);
+      const form=await request.formData();
+      const saved=await saveContactManualCrop(env.DB,env.MEDIA,member.userId,cardId,form.get("image"));
+      scheduleContactCardReverification(env,ctx,member.userId,cardId);
+      return json({success:true,status:"processing",manualCrop:true,eventId:saved.eventId},202);
+    }catch(error){return badRequest(error.message || "手動裁切儲存失敗");}
+  }
   const contactInsightRetryMatch = url.pathname.match(/^\/v1\/card-collection\/([^/]+)\/recalculate-insights$/);
   if (request.method === "POST" && contactInsightRetryMatch) {
     const member = await currentMember(request, env);
@@ -2825,7 +2845,7 @@ async function app(request, env, ctx) {
 
   if (env.ASSETS) {
     const assetRequest = url.pathname === "/"
-      ? new Request(new URL("/index-20260815-131.txt", url.origin), request)
+      ? new Request(new URL("/index-20260815-132.txt", url.origin), request)
       : request;
     const assetResponse = await env.ASSETS.fetch(assetRequest);
     if (url.pathname === "/" || ["/admin/", "/admin/index.html", "/admin.html"].includes(url.pathname)) {

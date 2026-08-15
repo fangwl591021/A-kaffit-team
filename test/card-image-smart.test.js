@@ -123,7 +123,7 @@ test("original and processed images have separate authenticated storage contract
 
 test("production browser flow preserves originals and only sends processed job ids into OCR", () => {
   const app=source("public/app.js");
-  const production=source("public/app-20260815-130.js");
+  const production=source("public/app-20260815-131.js");
   for(const text of [app,production]){
     assert.match(text,/uploadCardImageOriginal\(file, sideLabel, purpose\)/);
     assert.match(text,/processBusinessCardImage\(file\)/);
