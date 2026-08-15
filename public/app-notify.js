@@ -9,14 +9,14 @@
     const text = String(message || '');
     if (/成功|完成|已儲存|已收藏|已贈送|登入成功|已送出|已更新|已複製|已建立|已報名|已傳送/.test(text)) return 'success';
     if (/失敗|錯誤|無法|不能|不可|逾時|不存在|未完成|不足|拒絕|異常/.test(text)) return 'error';
-    if (/請|注意|提醒|確認|尚未|需要|建議/.test(text)) return 'warning';
+    if (/請|注意|提醒|確認|尚未|需要|建議|刪除|停止|取消/.test(text)) return 'warning';
     return 'info';
   };
 
   const titleFor = (type, title = '') => title || ({
     success: '操作完成',
     error: '操作未完成',
-    warning: '請注意',
+    warning: '請確認',
     info: '系統通知',
   }[type] || '系統通知');
 
@@ -32,6 +32,7 @@
       .ak-notify-success .ak-notify-icon{background:#07c160;color:#fff}.ak-notify-error .ak-notify-icon{background:#fa5151;color:#fff}.ak-notify-warning .ak-notify-icon{background:#ffc300;color:#fff}.ak-notify-info .ak-notify-icon{background:#f2f2f2;color:#576b95}
       .ak-notify-title{margin:0;color:#111;font-size:20px;font-weight:700;line-height:1.35;letter-spacing:.01em}
       .ak-notify-message{margin:10px 0 0;color:#888;font-size:15px;line-height:1.65;white-space:pre-line;overflow-wrap:anywhere}
+      .ak-notify-input{width:100%;margin-top:16px;padding:12px 14px;border:1px solid #d9d9d9;border-radius:10px;background:#f7f7f7;color:#111;font-size:16px;line-height:1.4;outline:none}.ak-notify-input:focus{border-color:#07c160;background:#fff;box-shadow:0 0 0 2px rgba(7,193,96,.08)}
       .ak-notify-actions{display:flex;border-top:1px solid #ededed}
       .ak-notify-button{flex:1;min-height:54px;border:0;background:#fff;font-size:17px;font-weight:600;color:#07c160;-webkit-tap-highlight-color:transparent}
       .ak-notify-button:active{background:#f7f7f7}.ak-notify-button+.ak-notify-button{border-left:1px solid #ededed}.ak-notify-button.secondary{color:#576b95}.ak-notify-button.danger{color:#fa5151}
@@ -43,8 +44,7 @@
 
   function iconFor(type) {
     if (type === 'success') return '✓';
-    if (type === 'error') return '!';
-    if (type === 'warning') return '!';
+    if (type === 'error' || type === 'warning') return '!';
     return 'i';
   }
 
@@ -87,6 +87,16 @@
     message.textContent = String(item.message ?? '');
     const actions = document.createElement('div');
     actions.className = 'ak-notify-actions';
+    let input = null;
+
+    if (item.kind === 'prompt') {
+      input = document.createElement('input');
+      input.className = 'ak-notify-input';
+      input.type = item.inputType || 'text';
+      input.value = String(item.defaultValue ?? '');
+      input.placeholder = item.placeholder || '';
+      input.autocomplete = 'off';
+    }
 
     const finish = (value) => {
       document.removeEventListener('keydown', onKey);
@@ -96,17 +106,21 @@
       queueMicrotask(renderNext);
     };
     const onKey = (event) => {
-      if (event.key === 'Escape') finish(item.kind === 'confirm' ? false : true);
-      if (event.key === 'Enter' && item.kind !== 'confirm') finish(true);
+      if (event.key === 'Escape') finish(item.kind === 'alert' ? true : null);
+      if (event.key === 'Enter') {
+        if (item.kind === 'prompt') finish(input?.value ?? '');
+        else if (item.kind === 'confirm') finish(true);
+        else finish(true);
+      }
     };
     document.addEventListener('keydown', onKey);
 
-    if (item.kind === 'confirm') {
+    if (item.kind === 'confirm' || item.kind === 'prompt') {
       const cancel = document.createElement('button');
       cancel.className = 'ak-notify-button secondary';
       cancel.type = 'button';
       cancel.textContent = item.cancelText || '取消';
-      cancel.onclick = () => finish(false);
+      cancel.onclick = () => finish(item.kind === 'prompt' ? null : false);
       actions.append(cancel);
     }
 
@@ -114,14 +128,15 @@
     ok.className = `ak-notify-button${item.danger ? ' danger' : ''}`;
     ok.type = 'button';
     ok.textContent = item.okText || '確定';
-    ok.onclick = () => finish(true);
+    ok.onclick = () => finish(item.kind === 'prompt' ? (input?.value ?? '') : true);
     actions.append(ok);
 
     body.append(icon, title, message);
+    if (input) body.append(input);
     card.append(body, actions);
     layer.append(card);
     root.append(layer);
-    requestAnimationFrame(() => ok.focus({ preventScroll:true }));
+    requestAnimationFrame(() => (input || ok).focus({ preventScroll:true }));
   }
 
   function enqueue(item) {
@@ -134,7 +149,8 @@
 
   window.appNotice = (message, options = {}) => enqueue({ kind:'alert', message, ...options });
   window.appConfirm = (message, options = {}) => enqueue({ kind:'confirm', message, ...options });
+  window.appPrompt = (message, defaultValue = '', options = {}) => enqueue({ kind:'prompt', message, defaultValue, ...options });
 
-  // 將既有數十個 alert() 全域換成 App 內通知，不需逐一修改業務流程。
+  // 既有 alert() 全域轉成 App 內通知；confirm/prompt 因同步回傳限制，於主程式改用 async appConfirm/appPrompt。
   window.alert = (message) => { void window.appNotice(message); };
 })();
