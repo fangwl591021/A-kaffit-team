@@ -18,7 +18,11 @@ test("members can create their electronic card from the existing photo OCR flow"
   const scanEnd = app.indexOf("let collectionCards", scanStart);
   const scan = app.slice(scanStart, scanEnd);
   assert.match(scan, /prepareBusinessCardImage/);
-  assert.match(app, /confidence<CARD_IMAGE_THRESHOLDS\.confidence[\s\S]*cropCollectionScanImage\(file,sideLabel\)[\s\S]*compressCardImage\(processed\)/);
+  assert.match(app, /confidence<CARD_IMAGE_THRESHOLDS\.confidence/);
+  assert.match(app, /processed=file/);
+  assert.match(app, /needsReview\?"needs_review":"completed"/);
+  assert.match(app, /compressCardImage\(processed\)/);
+  assert.doesNotMatch(app, /processed=await cropCollectionScanImage\(file,sideLabel\)/);
   assert.match(scan, /\/v1\/cards\/me\/imports[\s\S]*\/recognize/);
   assert.match(scan, /\/v1\/cards\/me\/imports\/\$\{encodeURIComponent\(eventId\)\}\/confirm/);
   assert.doesNotMatch(scan, /\/submit|queueAndFulfillCardCollectionReward/);

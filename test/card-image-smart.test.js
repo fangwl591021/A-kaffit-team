@@ -123,12 +123,14 @@ test("original and processed images have separate authenticated storage contract
 
 test("production browser flow preserves originals and only sends processed job ids into OCR", () => {
   const app=source("public/app.js");
-  const production=source("public/app-20260815-131.js");
+  const production=source("public/app-20260815-132.js");
   for(const text of [app,production]){
     assert.match(text,/uploadCardImageOriginal\(file, sideLabel, purpose\)/);
     assert.match(text,/processBusinessCardImage\(file\)/);
     assert.match(text,/confidence<CARD_IMAGE_THRESHOLDS\.confidence/);
-    assert.match(text,/cropCollectionScanImage\(file,sideLabel\)/);
+    assert.match(text,/processed=file/);
+    assert.match(text,/needsReview\?"needs_review":"completed"/);
+    assert.doesNotMatch(text,/processed=await cropCollectionScanImage\(file,sideLabel\)/);
     assert.match(text,/form\.append\("frontJobId",collectionScanJobs\[0\]\)/);
   }
 });
