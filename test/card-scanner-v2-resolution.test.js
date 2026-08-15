@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CARD_SCANNER_RESOLUTION, analysisPointsToWorking, finalOutputSize, fitInside, resolutionPlan } from '../public/card-scanner-v2-resolution.js';
+import { readFileSync } from 'node:fs';
+
+const source=(path)=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 
 test('high-resolution phone photo is reduced before analysis',()=>{
   const plan=resolutionPlan(4032,3024);
@@ -30,4 +33,11 @@ test('final output uses a controlled landscape or portrait target',()=>{
 
 test('final output does not upscale low-resolution crops',()=>{
   assert.deepEqual(finalOutputSize(1000,600),{width:1000,height:600,upscaled:false});
+});
+
+test('working-only normalizer exists for upload and Cropper memory safety',()=>{
+  const resolution=source('public/card-scanner-v2-resolution.js');
+  assert.match(resolution,/export async function normalizeWorkingSource/);
+  assert.match(resolution,/workingLongEdge=CARD_SCANNER_RESOLUTION\.workingLongEdge/);
+  assert.match(resolution,/if\(typeof source\.close==='function'\)source\.close\(\)/);
 });
