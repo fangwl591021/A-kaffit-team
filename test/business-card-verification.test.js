@@ -10,8 +10,14 @@ test('business-card verification searches strong identifiers and official regist
   for(const marker of ['電話原字串','完整地址','Email','findbiz.nat.gov.tw','gcis.nat.gov.tw','統編','公會或政府名冊'])assert.match(prompt,new RegExp(marker));
   assert.equal(OCR_VERIFICATION_VERSION,'visual-web-v2');
   const cardSource=source('src/card-collection.js');
-  assert.match(cardSource,/tools:\[\{type:'web_search'\}\]/);
-  assert.match(cardSource,/name:'verified_business_card'/);
+  assert.match(cardSource,/cardLocalization/);
+  assert.match(cardSource,/boundingBox/);
+  assert.match(cardSource,/clippedEdges/);
+  const start=cardSource.indexOf('async function recognizeWithOpenAI');
+  const end=cardSource.indexOf('// 使用 Responses',start);
+  const primary=cardSource.slice(start,end);
+  assert.equal((primary.match(/callAiResponses\(/g)||[]).length,1);
+  assert.doesNotMatch(primary,/web_search/);
   assert.match(cardSource,/reverifyContactFromSource/);
 });
 

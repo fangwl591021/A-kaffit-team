@@ -169,7 +169,10 @@ function bytesToBase64(buffer) {
   return btoa(binary);
 }
 
-const OCR_SCHEMA = { type:'object', additionalProperties:false, required:['isBusinessCard','confidence','language','primaryIndustry','secondaryIndustries','industryConfidence',...Object.keys(FIELD_LIMITS)], properties:{ isBusinessCard:{type:'boolean'}, confidence:{type:'number'}, language:{type:'string'}, primaryIndustry:{type:'string',enum:[INDUSTRY_PENDING,...INDUSTRY_OPTIONS]}, secondaryIndustries:{type:'array',maxItems:2,items:{type:'string',enum:INDUSTRY_OPTIONS}}, industryConfidence:{type:'number'}, ...Object.fromEntries(Object.keys(FIELD_LIMITS).map((key)=>[key,{type:'string'}])) } };
+const CARD_POINT_SCHEMA={type:'object',additionalProperties:false,required:['x','y'],properties:{x:{type:'number',minimum:0,maximum:1},y:{type:'number',minimum:0,maximum:1}}};
+const CARD_BOX_SCHEMA={type:'object',additionalProperties:false,required:['x','y','width','height'],properties:{x:{type:'number',minimum:0,maximum:1},y:{type:'number',minimum:0,maximum:1},width:{type:'number',minimum:0,maximum:1},height:{type:'number',minimum:0,maximum:1}}};
+const CARD_LOCALIZATION_SCHEMA={type:'object',additionalProperties:false,required:['detected','incomplete','cropConfidence','boundingBox','corners','clippedEdges'],properties:{detected:{type:'boolean'},incomplete:{type:'boolean'},cropConfidence:{type:'number',minimum:0,maximum:1},boundingBox:CARD_BOX_SCHEMA,corners:{type:'array',minItems:4,maxItems:4,items:CARD_POINT_SCHEMA},clippedEdges:{type:'array',maxItems:4,items:{type:'string',enum:['left','right','top','bottom']}}}};
+const OCR_SCHEMA = { type:'object', additionalProperties:false, required:['isBusinessCard','confidence','language','cardLocalization','primaryIndustry','secondaryIndustries','industryConfidence',...Object.keys(FIELD_LIMITS)], properties:{ isBusinessCard:{type:'boolean'}, confidence:{type:'number'}, language:{type:'string'}, cardLocalization:CARD_LOCALIZATION_SCHEMA, primaryIndustry:{type:'string',enum:[INDUSTRY_PENDING,...INDUSTRY_OPTIONS]}, secondaryIndustries:{type:'array',maxItems:2,items:{type:'string',enum:INDUSTRY_OPTIONS}}, industryConfidence:{type:'number'}, ...Object.fromEntries(Object.keys(FIELD_LIMITS).map((key)=>[key,{type:'string'}])) } };
 export const OCR_VERIFICATION_VERSION = 'visual-web-v2';
 const OCR_VERIFICATION_SCHEMA = {
   ...OCR_SCHEMA,
@@ -301,7 +304,7 @@ export async function verifyContactCardData(db,userId,id,payload,provider,model)
   let result;
   try{
     result=await callAiJsonWithRetry(provider,{
-      model:model || 'gpt-5.6-terra',reasoning:{effort:'low'},max_output_tokens:1600,tools:[{type:'web_search'}],
+      model,reasoning:{effort:'low'},max_output_tokens:1600,tools:[{type:'web_search'}],
       input:[{role:'user',content:`你是商務名片資料查核助手。使用者準備儲存的人工修正資料是目前主資料，原始名片 OCR 只作為歷史參考，不得因兩者不同而判定人工修正錯誤。逐欄查核公開聯絡資料並搜尋公開網路資料。\n\n待查核資料：${JSON.stringify(facts)}\n原始名片 OCR 證據：${JSON.stringify(ocrEvidence)}\n\n規則：\n1. 每個待查核欄位都必須回傳一次 checks，不可遺漏或重複。\n2. status 只能是 verified、invalid、unverifiable。人工修正與 OCR 不同不構成 invalid；有可靠公開來源支持才可 verified，暫時找不到公開來源則為 unverifiable。\n3. 地址必須是可辨識的完整地址，且與公司、網站、原始名片或可靠公開來源一致；無法確認就 unverifiable。\n4. 電話、Email、網站、LINE 連結須同時檢查格式與其和姓名／公司的一致性。\n5. 不可猜測、補造或因看起來合理就通過。evidence 簡述 OCR 或公開來源依據；無證據時留空。\n6. 只要一欄 invalid、unverifiable、缺少查核或沒有證據，passed=false。只回傳 JSON。`}],
       text:{format:{type:'json_schema',name:'contact_data_verification',strict:true,schema:CONTACT_DATA_VERIFICATION_SCHEMA}},
     },'名片資料二次查核回傳不完整，資料未儲存');
@@ -329,22 +332,22 @@ export function businessCardVerificationPrompt(firstPass = {}) {
 7. 所有名片欄位都要回傳；無法確認時保留第一次 OCR。verificationSources 記錄實際採用網址及相符欄位，verificationNotes 說明是否修正與理由。`;
 }
 async function recognizeWithOpenAI(apiKey, model, images) {
-  const firstContent = [{ type:'input_text', text:`辨識這張商務名片。只擷取畫面中可確認的文字，不猜測；無法確認的欄位填空字串。若不是名片，isBusinessCard=false。繁體中文內容保留原文。note 僅放無法歸類但有價值的名片文字。
-並依公司、職稱、部門與服務說明做一次行業分類：主行業只能選 1 個，次行業最多 2 個且不可與主行業相同。可選行業為：${INDUSTRY_OPTIONS.join('、')}。無法可靠判斷時 primaryIndustry 填「待分類」、secondaryIndustries 填空陣列；industryConfidence 填 0 到 1。` },...businessCardImages(images)];
-  const firstResult = await callAiResponses(apiKey, { model:model || 'gpt-5.6-terra', reasoning:{effort:'low'}, max_output_tokens:1800, input:[{role:'user',content:firstContent}], text:{format:{type:'json_schema',name:'business_card',strict:true,schema:OCR_SCHEMA}} });
-  const firstPassText=outputText(firstResult);
-  if(!firstPassText)throw new Error('AI 未回傳第一次名片辨識結果');
-  const firstPass=JSON.parse(firstPassText);
-  if(!firstPass.isBusinessCard)return {...firstPass,verificationVersion:OCR_VERIFICATION_VERSION,verificationConfidence:0,verificationNotes:'第一次辨識判定不是名片',verificationSources:[]};
-  const verificationContent=[{type:'input_text',text:businessCardVerificationPrompt(firstPass)},...businessCardImages(images)];
-  const verifiedResult=await callAiResponses(apiKey,{
-    model:model || 'gpt-5.6-terra',reasoning:{effort:'medium'},tools:[{type:'web_search'}],max_output_tokens:2600,
-    input:[{role:'user',content:verificationContent}],
-    text:{format:{type:'json_schema',name:'verified_business_card',strict:true,schema:OCR_VERIFICATION_SCHEMA}},
-  });
-  const verifiedText=outputText(verifiedResult);
-  if(!verifiedText)throw new Error('AI 未回傳名片二次查證結果');
-  return JSON.parse(verifiedText);
+  const content=[{type:'input_text',text:`辨識這張商務名片，並在同一次視覺辨識中完成名片定位。只擷取畫面中可確認的文字，不猜測；無法確認的欄位填空字串。若不是名片，isBusinessCard=false。繁體中文保留原文。note 僅放無法歸類但有價值的名片文字。
+
+cardLocalization 規則：
+1. detected 表示是否可找到名片本體。
+2. boundingBox 使用整張輸入圖片的 0~1 正規化座標 x,y,width,height，必須包住實際可見名片，不得包入明顯桌面、手掌、鍵盤等背景。
+3. corners 固定回傳左上、右上、右下、左下四點，均為 0~1 正規化座標。
+4. 如果名片任一實際邊緣已超出照片、碰到影像邊界而無法確認，incomplete=true，並在 clippedEdges 列出 left/right/top/bottom；不得憑空補出不存在的邊。
+5. cropConfidence 表示只根據原圖定位名片邊界的信心；不確定時降低分數，不可硬猜。
+
+並依公司、職稱、部門與服務說明做一次行業分類：主行業只能選 1 個，次行業最多 2 個且不可與主行業相同。可選行業為：${INDUSTRY_OPTIONS.join('、')}。無法可靠判斷時 primaryIndustry 填「待分類」、secondaryIndustries 填空陣列；industryConfidence 填 0 到 1。只回傳符合 JSON Schema 的結果。`},...businessCardImages(images)];
+  const result=await callAiResponses(apiKey,{model:model || 'gpt-5.6-terra',reasoning:{effort:'low'},max_output_tokens:2100,input:[{role:'user',content}],text:{format:{type:'json_schema',name:'business_card',strict:true,schema:OCR_SCHEMA}}});
+  const parsedText=outputText(result);
+  if(!parsedText)throw new Error('AI 未回傳名片辨識結果');
+  const parsed=JSON.parse(parsedText);
+  if(!parsed.cardLocalization)throw new Error('AI 未回傳名片定位結果');
+  return parsed;
 }
 
 // 使用 Responses 的 web_search 工具，只把 OCR／人工校正過的公開欄位送去查找。
@@ -687,21 +690,21 @@ export async function createImport(db, bucket, userId, form, options = {}) {
   const purpose=options.purpose === 'personal' ? 'personal' : 'collection';
   const fingerprint=await cardImportFingerprint(buffers,purpose === 'personal' ? 'personal-card' : '');
   await ensureCardImportFingerprintTable(db);
-  const previous=await db.prepare('SELECT status,created_at FROM card_import_fingerprints WHERE user_id=? AND fingerprint=? LIMIT 1').bind(userId,fingerprint).first();
-  if(previous && previous.status!=='failed' && (previous.status!=='pending' || Date.parse(previous.created_at)>Date.now()-2*60*60*1000)){
-    const error=new Error('這張名片圖片已上傳過，不能重複收藏或領點');error.code='duplicate_upload';throw error;
-  }
-  if(previous)await db.prepare('DELETE FROM card_import_fingerprints WHERE user_id=? AND fingerprint=?').bind(userId,fingerprint).run();
+  const previous=await db.prepare('SELECT status,created_at,event_id FROM card_import_fingerprints WHERE user_id=? AND fingerprint=? LIMIT 1').bind(userId,fingerprint).first();
+  const duplicateImage=Boolean(previous && previous.status!=='failed' && (previous.status!=='pending' || Date.parse(previous.created_at)>Date.now()-2*60*60*1000));
+  // 同一張圖片允許重新 OCR／裁切／更新既有名片，但不得建立新的領點資格。
+  // 新的 duplicate import 故意不綁 card_import_fingerprints；confirm 後 reward gate 會判定為 0 點。
+  if(previous && !duplicateImage)await db.prepare('DELETE FROM card_import_fingerprints WHERE user_id=? AND fingerprint=?').bind(userId,fingerprint).run();
   const id = newId('card_import');
   const keys = files.map((_, index)=>`${purpose === 'personal' ? 'personal-card-imports' : 'card-collections'}/${userId}/${id}/${index ? 'back' : 'front'}.webp`);
-  await db.prepare("INSERT INTO card_import_fingerprints (user_id,fingerprint,event_id,status) VALUES (?,?,?,'pending')").bind(userId,fingerprint,id).run();
+  if(!duplicateImage)await db.prepare("INSERT INTO card_import_fingerprints (user_id,fingerprint,event_id,status) VALUES (?,?,?,'pending')").bind(userId,fingerprint,id).run();
   try {
     await Promise.all(files.map((file,index)=>bucket.put(keys[index],buffers[index],{httpMetadata:{contentType:file.type}})));
     await db.prepare('INSERT INTO card_import_events (id, scanner_user_id, front_r2_key, back_r2_key, front_content_type) VALUES (?, ?, ?, ?, ?)').bind(id,userId,keys[0],keys[1] || '',files[0].type).run();
-    return { id, imageCount:files.length };
+    return { id, imageCount:files.length, duplicateImage };
   } catch(error) {
     await Promise.all(keys.map((key)=>bucket.delete(key).catch(()=>null)));
-    await db.prepare('DELETE FROM card_import_fingerprints WHERE user_id=? AND fingerprint=?').bind(userId,fingerprint).run().catch(()=>null);
+    if(!duplicateImage)await db.prepare('DELETE FROM card_import_fingerprints WHERE user_id=? AND fingerprint=?').bind(userId,fingerprint).run().catch(()=>null);
     throw error;
   }
 }
@@ -718,7 +721,7 @@ export async function recognizeImport(db, bucket, userId, eventId, apiKey, model
     const status = result.isBusinessCard ? 'review_ready' : 'rejected';
     await db.prepare('UPDATE card_import_events SET status=?, ocr_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(status,JSON.stringify(result),eventId).run();
     if (!result.isBusinessCard) throw new Error('這張圖片看起來不是名片，請重新拍攝');
-    return { eventId, card:cleanCard(result), confidence:Number(result.confidence || 0), language:text(result.language,40) };
+    return { eventId, card:cleanCard(result), confidence:Number(result.confidence || 0), language:text(result.language,40), localization:result.cardLocalization || null };
   } catch (error) {
     await db.prepare("UPDATE card_import_events SET status=CASE WHEN status='rejected' THEN status ELSE 'failed' END, updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(eventId).run();
     // 辨識失敗不保留無用途的原始照片；使用者重新拍攝即可，避免 R2 累積孤兒檔案。
@@ -825,11 +828,11 @@ export async function serveContactOriginalImage(db,bucket,request,userId,id) {
   return new Response(request.method==='HEAD'?null:object.body,{headers:{'content-type':object.httpMetadata?.contentType||row.front_content_type||'image/webp','cache-control':'private, no-store','x-content-type-options':'nosniff'}});
 }
 
-export async function saveContactManualCrop(db,bucket,userId,id,file) {
+export async function saveContactManualCrop(db,bucket,userId,id,file,options={}) {
   if(!(file instanceof File) || !file.size)throw new Error('請先完成名片裁切');
   if(!ALLOWED_IMAGE_TYPES.has(file.type))throw new Error('裁切圖片僅支援 JPEG、PNG 或 WebP');
   if(file.size>MAX_IMAGE_BYTES)throw new Error('裁切後圖片須小於 2MB');
-  const row=await db.prepare(`SELECT cc.id,cc.source_event_id,cie.front_r2_key,cie.front_content_type,cie.ocr_json
+  const row=await db.prepare(`SELECT cc.id,cc.source_event_id,cie.front_r2_key,cie.front_content_type,cie.ocr_json,cie.status event_status
     FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
     WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active'`).bind(id,userId).first();
   if(!row?.source_event_id || !row.front_r2_key)throw new Error('這張名片沒有可供手動裁切的原始圖片');
@@ -841,7 +844,7 @@ export async function saveContactManualCrop(db,bucket,userId,id,file) {
   const manualCrop={originalR2Key,currentR2Key:croppedKey,updatedAt:new Date().toISOString()};
   try{
     await db.batch([
-      db.prepare("UPDATE card_import_events SET front_r2_key=?,front_content_type=?,status='received',ocr_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND scanner_user_id=?").bind(croppedKey,file.type,JSON.stringify({...ocr,_manualCrop:manualCrop}),row.source_event_id,userId),
+      db.prepare("UPDATE card_import_events SET front_r2_key=?,front_content_type=?,status=?,ocr_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND scanner_user_id=?").bind(croppedKey,file.type,options.reverify===false ? (row.event_status || 'created') : 'received',JSON.stringify({...ocr,_manualCrop:manualCrop}),row.source_event_id,userId),
       db.prepare("UPDATE contact_cards SET front_r2_key=?,front_content_type=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND scanner_user_id=?").bind(croppedKey,file.type,id,userId),
     ]);
   }catch(error){await bucket.delete(croppedKey).catch(()=>null);throw error;}

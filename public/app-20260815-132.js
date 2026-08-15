@@ -1,4 +1,4 @@
-import { CARD_IMAGE_THRESHOLDS, processBusinessCardImage } from "/card-image-smart-20260815-5.js";
+import { CARD_IMAGE_THRESHOLDS, orderQuad, warpPerspective } from "/card-image-smart-20260815-5.js";
 
 const OFFICIAL_PAGES = {
   home: "https://www.k-link.com.tw/",
@@ -2057,16 +2057,87 @@ async function saveCardImageProcessingResult(jobId, file, metadata, status = "co
 
 async function prepareBusinessCardImage(file, sideLabel, purpose) {
   const job=await uploadCardImageOriginal(file,sideLabel,purpose);
-  let result=await processBusinessCardImage(file);let processed=result.file;let metadata=result.metadata || {};
-  const confidence=Number(metadata.detection?.confidence||0),quality=Number(metadata.quality?.overall||0);
-  const needsReview=!processed||confidence<CARD_IMAGE_THRESHOLDS.confidence||quality<CARD_IMAGE_THRESHOLDS.quality;
-  if(needsReview){
-    processed=file;
-    metadata={...metadata,processing:{...(metadata.processing||{}),perspectiveCorrected:false,cropped:false,manualCorrection:false},warning:"自動裁切信心不足，已保留完整原圖進行辨識；如結果不理想，可在名片結果頁手動裁切並重新辨識"};
-  }
-  processed=await compressCardImage(processed);
-  await saveCardImageProcessingResult(job.id,processed,metadata,needsReview?"needs_review":"completed");
+  const processed=await compressCardImage(file);
+  const metadata={
+    processingVersion:'vision-localization-v3',
+    detection:{detected:false,confidence:0,strategy:'vision-pending'},
+    quality:{overall:100,blur:100,brightness:100,glare:100,coverage:100},
+    processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},
+    corners:[],warning:'等待單次 AI Vision 同時完成 OCR 與名片定位',
+  };
+  await saveCardImageProcessingResult(job.id,processed,metadata,'completed');
   return {file:processed,jobId:job.id,metadata};
+}
+
+function normalizedVisionLocalization(value={}){
+  const clamp01=(v)=>Math.max(0,Math.min(1,Number(v)||0));
+  const box=value?.boundingBox||{};
+  const boundingBox={x:clamp01(box.x),y:clamp01(box.y),width:clamp01(box.width),height:clamp01(box.height)};
+  const corners=Array.isArray(value?.corners)?value.corners.slice(0,4).map(p=>({x:clamp01(p?.x),y:clamp01(p?.y)})):[];
+  return {detected:value?.detected===true,incomplete:value?.incomplete===true,cropConfidence:clamp01(value?.cropConfidence),boundingBox,corners,clippedEdges:Array.isArray(value?.clippedEdges)?value.clippedEdges:[]};
+}
+async function cropByVisionLocalization(file,rawLocalization){
+  const localization=normalizedVisionLocalization(rawLocalization);
+  if(!file||!localization.detected||localization.incomplete||localization.cropConfidence<0.72)return null;
+  const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'}).catch(()=>createImageBitmap(file));
+  try{
+    const scale=Math.min(1,2200/Math.max(bitmap.width,bitmap.height));
+    const source=document.createElement('canvas');
+    source.width=Math.max(1,Math.round(bitmap.width*scale));
+    source.height=Math.max(1,Math.round(bitmap.height*scale));
+    source.getContext('2d',{alpha:false}).drawImage(bitmap,0,0,source.width,source.height);
+
+    const b=localization.boundingBox;
+    if(b.width<0.08||b.height<0.05)return null;
+    const padX=b.width*.015,padY=b.height*.015;
+    const left=Math.max(0,b.x-padX),top=Math.max(0,b.y-padY),right=Math.min(1,b.x+b.width+padX),bottom=Math.min(1,b.y+b.height+padY);
+    const bx=Math.round(left*source.width),by=Math.round(top*source.height),bw=Math.round((right-left)*source.width),bh=Math.round((bottom-top)*source.height);
+    if(bw<80||bh<50)return null;
+
+    let output=null;
+    if(localization.corners.length===4){
+      const rawPoints=orderQuad(localization.corners.map(p=>({x:p.x*source.width,y:p.y*source.height})));
+      const xs=rawPoints.map(p=>p.x/source.width),ys=rawPoints.map(p=>p.y/source.height);
+      const cornerBox={x:Math.min(...xs),y:Math.min(...ys),width:Math.max(...xs)-Math.min(...xs),height:Math.max(...ys)-Math.min(...ys)};
+      const intersectionLeft=Math.max(b.x,cornerBox.x),intersectionTop=Math.max(b.y,cornerBox.y);
+      const intersectionRight=Math.min(b.x+b.width,cornerBox.x+cornerBox.width),intersectionBottom=Math.min(b.y+b.height,cornerBox.y+cornerBox.height);
+      const intersection=Math.max(0,intersectionRight-intersectionLeft)*Math.max(0,intersectionBottom-intersectionTop);
+      const union=b.width*b.height+cornerBox.width*cornerBox.height-intersection;
+      const boxIou=union>0?intersection/union:0;
+      const boxCenter={x:b.x+b.width/2,y:b.y+b.height/2};
+      const cornerCenter={x:cornerBox.x+cornerBox.width/2,y:cornerBox.y+cornerBox.height/2};
+      const centerDelta=Math.hypot(boxCenter.x-cornerCenter.x,boxCenter.y-cornerCenter.y);
+      const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+      const widthEstimate=(dist(rawPoints[0],rawPoints[1])+dist(rawPoints[3],rawPoints[2]))/2;
+      const heightEstimate=(dist(rawPoints[0],rawPoints[3])+dist(rawPoints[1],rawPoints[2]))/2;
+      const rawRatio=widthEstimate/Math.max(1,heightEstimate);
+      const boxRatio=(b.width*source.width)/Math.max(1,b.height*source.height);
+      const ratioAgreement=Math.max(rawRatio,boxRatio)/Math.max(.001,Math.min(rawRatio,boxRatio));
+      const cardLikeRatio=(rawRatio>=1.20&&rawRatio<=2.15)||(rawRatio>=0.46&&rawRatio<=0.83);
+      const cornersAgreeWithBox=boxIou>=0.72&&centerDelta<=0.06&&ratioAgreement<=1.22&&cardLikeRatio&&Math.min(widthEstimate,heightEstimate)>=80;
+
+      if(cornersAgreeWithBox){
+        const center=rawPoints.reduce((acc,p)=>({x:acc.x+p.x/4,y:acc.y+p.y/4}),{x:0,y:0});
+        const points=rawPoints.map(p=>({
+          x:Math.max(0,Math.min(source.width-1,center.x+(p.x-center.x)*1.025)),
+          y:Math.max(0,Math.min(source.height-1,center.y+(p.y-center.y)*1.025)),
+        }));
+        const ratio=Math.max(.45,Math.min(2.2,rawRatio));
+        const long=Math.min(1600,Math.max(1,Math.round(Math.max(widthEstimate,heightEstimate))));
+        const width=ratio>=1?long:Math.max(1,Math.round(long*ratio));
+        const height=ratio>=1?Math.max(1,Math.round(long/ratio)):long;
+        output=warpPerspective(source,points,width,height);
+      }
+    }
+
+    if(!output){
+      output=document.createElement('canvas');
+      output.width=bw;output.height=bh;
+      output.getContext('2d',{alpha:false}).drawImage(source,bx,by,bw,bh,0,0,bw,bh);
+    }
+    const blob=await new Promise(resolve=>output.toBlob(resolve,'image/webp',.9));
+    return blob?new File([blob],'business-card-vision-crop.webp',{type:'image/webp'}):null;
+  }finally{bitmap.close?.();}
 }
 async function prepareCardLiff() {
   await initLiffOnce();
@@ -2513,6 +2584,8 @@ function showPersonalCardReview(eventId, cardData, confidence) {
 let collectionCards = [];
 let collectionScanFiles = [];
 let collectionScanJobs = [];
+let collectionVisionCropFile = null;
+let collectionVisionLocalization = null;
 let collectionIndustryOptions = [];
 let collectionRankingEnabled = false;
 let collectionRefreshTimer = null;
@@ -2642,20 +2715,33 @@ function bindScanInputs() {
     try { await withActionFeedback(button,async()=>{
       const form=new FormData();form.append("frontJobId",collectionScanJobs[0]);if(collectionScanJobs[1])form.append("backJobId",collectionScanJobs[1]);
       const upload=await fetch("/v1/card-collection/imports",{method:"POST",headers:{authorization:"Bearer " + state.token},body:form});const uploaded=await upload.json();if(!upload.ok)throw new Error(uploaded.error||"名片上傳失敗");
-      const submitted=await api("/v1/card-collection/imports/" + encodeURIComponent(uploaded.import.id) + "/submit",{method:"POST",body:"{}"});
-      collectionScanFiles=[];collectionScanJobs=[];await cardCollection();
-      if(submitted.reward?.status==="pending_validation")alert("名片辨識完成並確認不是重複收藏後，將自動贈送 10 K點。");
+      const recognized=await api("/v1/card-collection/imports/" + encodeURIComponent(uploaded.import.id) + "/recognize",{method:"POST",body:"{}"});
+      collectionVisionLocalization=recognized.localization||null;
+      if(collectionVisionLocalization?.incomplete){
+        const edges=(collectionVisionLocalization.clippedEdges||[]).join('、');
+        throw new Error('名片未完整入鏡' + (edges ? '（缺少：' + edges + '）' : '') + '，請稍微拉遠重新拍攝。');
+      }
+      collectionVisionCropFile=await cropByVisionLocalization(collectionScanFiles[0],collectionVisionLocalization);
+      showCollectionReview(recognized.eventId,recognized.card,recognized.confidence);
     },{busy:"送出中…",success:"已送出，AI 分析中"}); } catch(error){alert(error.message);}
   };
 }
 
 function showCollectionReview(eventId, card, confidence) {
-  layout(`<section class="card collection-review"><button class="back-card" id="cancelCollectionReview" aria-label="返回">‹</button><h2>確認名片資料</h2><p class="muted">AI 辨識信心 ${Math.round(Number(confidence || 0)*100)}%。請先校正再收藏，避免錯誤資料。</p>${collectionForm(card,"scan")}<button class="btn" id="saveScannedCard">儲存至名片收藏</button></section>`);
+  const previewUrl=collectionVisionCropFile?URL.createObjectURL(collectionVisionCropFile):'';
+  const localization=normalizedVisionLocalization(collectionVisionLocalization||{});
+  const cropNote=localization.detected ? `AI 名片定位 ${Math.round(localization.cropConfidence*100)}%${collectionVisionCropFile?'，已先分離名片本體':'，請確認後可手動裁切'}` : 'AI 未能可靠定位名片外框，文字仍可先校正。';
+  layout(`<section class="card collection-review"><button class="back-card" id="cancelCollectionReview" aria-label="返回">‹</button><h2>確認名片資料</h2><p class="muted">AI 辨識信心 ${Math.round(Number(confidence || 0)*100)}%。${esc(cropNote)}</p>${previewUrl?`<img src="${esc(previewUrl)}" alt="AI 分離後名片" style="display:block;width:100%;max-height:360px;object-fit:contain;border-radius:16px;margin:12px 0;background:#f4f4f4">`:''}${collectionForm(card,"scan")}<button class="btn" id="saveScannedCard">儲存至名片收藏</button></section>`);
   $("#cancelCollectionReview").onclick=()=>cardCollection();
   $("#saveScannedCard").onclick=async()=>{const button=$("#saveScannedCard");try{await withActionFeedback(button,async()=>{
     const save=async(action="")=>{const response=await fetch(`/v1/card-collection/imports/${encodeURIComponent(eventId)}/confirm`,{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${state.token}`},body:JSON.stringify({card:readCollectionForm("scan"),duplicateAction:action})});const body=await response.json();return {response,body};};
     let result=await save();if(result.response.status===409&&result.body.code==="duplicate_contact"&&confirm(`收藏名單已有「${result.body.duplicate?.displayName || "相同名片"}」，要用這次資料更新嗎？更新既有名片不會重複贈點。`))result=await save("update");if(!result.response.ok)throw new Error(result.body.error||"名片儲存失敗");
-    collectionScanFiles=[];await cardCollection();
+    if(collectionVisionCropFile && !result.body.updated && result.body.card?.id){
+      const cropForm=new FormData();cropForm.append('image',collectionVisionCropFile);
+      const cropResponse=await fetch(`/v1/card-collection/${encodeURIComponent(result.body.card.id)}/manual-crop`,{method:'POST',headers:{authorization:`Bearer ${state.token}`,'x-skip-reverify':'1'},body:cropForm});
+      const cropBody=await cropResponse.json().catch(()=>({}));if(!cropResponse.ok)throw new Error(cropBody.error||'名片分離圖片儲存失敗');
+    }
+    collectionScanFiles=[];collectionScanJobs=[];collectionVisionCropFile=null;collectionVisionLocalization=null;await cardCollection();
     if(result.body.updated)alert("已更新既有名片；重複收藏不贈點。");
     else if(result.body.reward?.status==="completed")alert("收藏成功，已贈送 10 K點。");
     else alert("收藏成功，10 K點正在入帳，系統會自動重試。");
