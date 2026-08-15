@@ -61,14 +61,27 @@ test('v2.3 fallback ranks candidates using content and surface evidence, not lon
   assert.match(fallback,/strategy:'long-border-fallback-v2\.3'/);
 });
 
-test('v2.4 adds a local text-guided candidate without OCR or network calls',()=>{
+test('v2.4 text-guided detection is local-only and reports clipped frames',()=>{
   const guided=source('public/card-scanner-v2-text-guided.js');
   assert.match(guided,/detectTextGuidedCard/);
-  assert.match(guided,/likelyContentBlocks/);
-  assert.match(guided,/expandContentBox/);
-  assert.match(guided,/strategy:'text-guided-v2\.4'/);
+  assert.match(guided,/textBands/);
+  assert.match(guided,/clusterBands/);
+  assert.match(guided,/buildAsymmetricCandidates/);
+  assert.match(guided,/contentBoundaryRisk/);
+  assert.match(guided,/incompleteFrame:true/);
+  assert.match(guided,/strategy:'text-guided-v2\.4\.2-clipped'/);
   assert.doesNotMatch(guided,/fetch\s*\(/);
   assert.doesNotMatch(guided,/openai|gemini|recognize|ocr/i);
+});
+
+test('runtime forces retake for text-guided clipped frame before consensus or auto crop',()=>{
+  const runtime=source('public/card-scanner-v2-runtime.js');
+  assert.match(runtime,/frameRisk=text\?\.incompleteFrame\?text:null/);
+  assert.match(runtime,/if\(selection\.frameRisk\)/);
+  assert.match(runtime,/推估名片外框會超出照片/);
+  const frameIndex=runtime.indexOf('if(selection.frameRisk)');
+  const consensusIndex=runtime.indexOf('if(!selection.consensus.approved)');
+  assert.ok(frameIndex>=0&&consensusIndex>frameIndex);
 });
 
 test('v2.4 runtime requires multi-detector consensus before automatic crop',()=>{
@@ -77,15 +90,16 @@ test('v2.4 runtime requires multi-detector consensus before automatic crop',()=>
   assert.match(runtime,/consensusApproved/);
   assert.match(runtime,/consensusIou/);
   assert.match(runtime,/if\(!selection\.consensus\.approved\)return/);
-  assert.match(runtime,/text-guided is advisory and can never be sole authority/);
   assert.match(runtime,/edge-hough \+ text-guided/);
   assert.match(runtime,/long-border \+ text-guided/);
 });
 
-test('scanner lab exposes consensus diagnostics while remaining zero-token',()=>{
+test('scanner lab exposes frame completeness and consensus diagnostics while remaining zero-token',()=>{
   const lab=source('public/card-scanner-v2-lab.html');
   assert.match(lab,/Card Scanner V2\.4 Lab/);
   assert.match(lab,/候選比較/);
+  assert.match(lab,/畫面完整性/);
+  assert.match(lab,/超出位置/);
   assert.match(lab,/一致性/);
   assert.match(lab,/一致來源/);
   assert.match(lab,/重疊比例/);
