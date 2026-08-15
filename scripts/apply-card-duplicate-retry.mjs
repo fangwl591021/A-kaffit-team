@@ -9,7 +9,7 @@ const oldDuplicate=`  const previous=await db.prepare('SELECT status,created_at 
   }
   if(previous)await db.prepare('DELETE FROM card_import_fingerprints WHERE user_id=? AND fingerprint=?').bind(userId,fingerprint).run();
   const id = newId('card_import');
-  const keys = files.map((_, index)=>\`${purpose === 'personal' ? 'personal-card-imports' : 'card-collections'}/${userId}/${id}/${index ? 'back' : 'front'}.webp\`);
+  const keys = files.map((_, index)=>\`\${purpose === 'personal' ? 'personal-card-imports' : 'card-collections'}/\${userId}/\${id}/\${index ? 'back' : 'front'}.webp\`);
   await db.prepare("INSERT INTO card_import_fingerprints (user_id,fingerprint,event_id,status) VALUES (?,?,?,'pending')").bind(userId,fingerprint,id).run();`;
 
 const newDuplicate=`  const previous=await db.prepare('SELECT status,created_at,event_id FROM card_import_fingerprints WHERE user_id=? AND fingerprint=? LIMIT 1').bind(userId,fingerprint).first();
@@ -18,7 +18,7 @@ const newDuplicate=`  const previous=await db.prepare('SELECT status,created_at,
   // 新的 duplicate import 故意不綁 card_import_fingerprints；confirm 後 reward gate 會判定為 0 點。
   if(previous && !duplicateImage)await db.prepare('DELETE FROM card_import_fingerprints WHERE user_id=? AND fingerprint=?').bind(userId,fingerprint).run();
   const id = newId('card_import');
-  const keys = files.map((_, index)=>\`${purpose === 'personal' ? 'personal-card-imports' : 'card-collections'}/${userId}/${id}/${index ? 'back' : 'front'}.webp\`);
+  const keys = files.map((_, index)=>\`\${purpose === 'personal' ? 'personal-card-imports' : 'card-collections'}/\${userId}/\${id}/\${index ? 'back' : 'front'}.webp\`);
   if(!duplicateImage)await db.prepare("INSERT INTO card_import_fingerprints (user_id,fingerprint,event_id,status) VALUES (?,?,?,'pending')").bind(userId,fingerprint,id).run();`;
 
 if(!collection.includes(oldDuplicate)) throw new Error('duplicate upload block not found');
