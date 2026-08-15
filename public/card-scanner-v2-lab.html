@@ -3,73 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Card Scanner V2 Lab</title>
+<title>Card Scanner V2.4 Lab</title>
 <style>
-body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f7f9;color:#222}.wrap{max-width:820px;margin:auto;padding:20px}.card{background:#fff;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 4px 18px #0001}h1{font-size:22px;margin:0 0 8px}.muted{color:#666;font-size:14px;line-height:1.6}.actions{display:flex;gap:10px;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:12px;padding:12px 16px;background:#222;color:#fff;font-weight:700;cursor:pointer}.btn.secondary{background:#e9ebef;color:#222}input[type=file]{display:none}.preview{position:relative;display:none;margin-top:14px}.preview img,.preview canvas{display:block;width:100%;height:auto;border-radius:12px}.overlay{position:absolute;inset:0;pointer-events:none}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{background:#f4f5f7;border-radius:10px;padding:10px}.metric small{display:block;color:#666}.metric b{display:block;font-size:18px;margin-top:4px;word-break:break-word}.status{font-weight:800;font-size:18px}.ok{color:#16803b}.warn{color:#a86400}.bad{color:#b42318}.result-image{max-width:100%;border-radius:12px;margin-top:10px}pre{white-space:pre-wrap;word-break:break-word;background:#101317;color:#d8f3dc;padding:12px;border-radius:10px;font-size:12px}@media(max-width:600px){.grid{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f7f9;color:#222}.wrap{max-width:820px;margin:auto;padding:20px}.card{background:#fff;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 4px 18px #0001}h1{font-size:22px;margin:0 0 8px}.muted{color:#666;font-size:14px;line-height:1.6}.actions{display:flex;gap:10px;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:12px;padding:12px 16px;background:#222;color:#fff;font-weight:700;cursor:pointer}.btn.secondary{background:#e9ebef;color:#222}input[type=file]{display:none}.preview{position:relative;display:none;margin-top:14px}.preview img,.preview canvas{display:block;width:100%;height:auto;border-radius:12px}.overlay{position:absolute;inset:0;pointer-events:none}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{background:#f4f5f7;border-radius:10px;padding:10px}.metric small{display:block;color:#666}.metric b{display:block;font-size:18px;margin-top:4px;word-break:break-word}.status{font-weight:800;font-size:18px}.ok{color:#16803b}.warn{color:#a86400}.bad{color:#b42318}.candidate{border:1px solid #e1e4e8;border-radius:12px;padding:10px;margin-top:8px}.candidate strong{display:block}.candidate span{display:block;color:#666;font-size:13px;margin-top:4px}.result-image{max-width:100%;border-radius:12px;margin-top:10px}pre{white-space:pre-wrap;word-break:break-word;background:#101317;color:#d8f3dc;padding:12px;border-radius:10px;font-size:12px}@media(max-width:600px){.grid{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <section class="card">
-    <h1>Card Scanner V2.3 Lab</h1>
-    <p class="muted">只在手機／瀏覽器本機執行，不上傳照片、不呼叫 OCR、不使用 AI token。V2.3 會同時檢查邊線、內容密度、內容貼合與表面一致性。</p>
-    <div class="actions">
-      <label class="btn">📷 拍照測試<input id="camera" type="file" accept="image/*" capture="environment"></label>
-      <label class="btn secondary">▧ 相簿選圖<input id="gallery" type="file" accept="image/*"></label>
-    </div>
+    <h1>Card Scanner V2.4 Lab</h1>
+    <p class="muted">V2.4 會同時比較幾何四邊、長邊 fallback 與文字引導候選。文字引導只找內容位置，不讀取文字內容、不上傳照片、不使用 AI token。</p>
+    <div class="actions"><label class="btn">📷 拍照測試<input id="camera" type="file" accept="image/*" capture="environment"></label><label class="btn secondary">▧ 相簿選圖<input id="gallery" type="file" accept="image/*"></label></div>
   </section>
-  <section class="card" id="diagnostic" hidden>
-    <div id="status" class="status"></div>
-    <p id="message" class="muted"></p>
-    <div class="grid" id="metrics"></div>
-    <div class="preview" id="preview"><img id="source"><canvas class="overlay" id="overlay"></canvas></div>
-  </section>
-  <section class="card" id="outputCard" hidden>
-    <strong>V2.3 補正輸出</strong>
-    <p class="muted">只有候選矩形同時通過幾何與內容驗證才會產生；若需要人工裁切或重拍，這裡保持空白。</p>
-    <img id="output" class="result-image" alt="V2.3 補正結果">
-  </section>
-  <section class="card" id="rawCard" hidden>
-    <strong>診斷資料</strong>
-    <pre id="raw"></pre>
-  </section>
+  <section class="card" id="diagnostic" hidden><div id="status" class="status"></div><p id="message" class="muted"></p><div class="grid" id="metrics"></div><div id="candidates"></div><div class="preview" id="preview"><img id="source"><canvas class="overlay" id="overlay"></canvas></div></section>
+  <section class="card" id="outputCard" hidden><strong>V2.4 補正輸出</strong><p class="muted">只有最佳候選通過幾何與內容驗證才會產生。</p><img id="output" class="result-image" alt="V2.4 補正結果"></section>
+  <section class="card" id="rawCard" hidden><strong>診斷資料</strong><pre id="raw"></pre></section>
 </div>
 <script type="module">
 import { processBusinessCardImage } from './card-scanner-v2-runtime.js';
-const $=(s)=>document.querySelector(s);
-let sourceUrl='',outputUrl='';
+const $=(s)=>document.querySelector(s);let sourceUrl='',outputUrl='';
 function clearUrls(){if(sourceUrl)URL.revokeObjectURL(sourceUrl);if(outputUrl)URL.revokeObjectURL(outputUrl);sourceUrl='';outputUrl='';}
 function pct(value){return `${Math.round((Number(value)||0)*100)}%`;}
 function metric(label,value){return `<div class="metric"><small>${label}</small><b>${value}</b></div>`;}
-function drawCorners(metadata){
-  const image=$('#source'),canvas=$('#overlay'),corners=metadata?.corners||[];
-  const width=image.clientWidth,height=image.clientHeight;
-  const ratio=window.devicePixelRatio||1;canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);canvas.style.width=`${width}px`;canvas.style.height=`${height}px`;
-  const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);ctx.clearRect(0,0,width,height);
-  if(corners.length!==4)return;
-  const pts=corners.map((p)=>({x:p.x*width,y:p.y*height}));
-  ctx.lineWidth=3;ctx.strokeStyle='#00a86b';ctx.fillStyle='#00a86b';ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.stroke();
-  for(const p of pts){ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);ctx.fill();}
-}
-async function run(file){
-  clearUrls();if(!file)return;
-  sourceUrl=URL.createObjectURL(file);$('#source').src=sourceUrl;$('#preview').style.display='block';
-  $('#diagnostic').hidden=false;$('#outputCard').hidden=true;$('#rawCard').hidden=true;$('#status').className='status warn';$('#status').textContent='分析中…';$('#message').textContent='本機正在建立 Working / Analysis Image 並執行 V2.3 候選驗證。';$('#metrics').innerHTML='';
-  try{
-    const result=await processBusinessCardImage(file),metadata=result.metadata||{},quality=metadata.quality||{},det=metadata.detection||{};
-    const warning=String(metadata.warning||'');
-    let state='manual',title='需要人工裁切',cls='warn',message=warning||'自動定位信心不足，建議人工確認。';
-    if(result.file){state='auto';title='自動補正成功';cls='ok';message='四角、幾何與內容驗證通過，可進 OCR Gate。';}
-    else if(/未完整入鏡|貼近照片邊界|重新拍攝/.test(warning)){state='retake';title='建議重新拍攝';cls='bad';message=warning;}
-    $('#status').className=`status ${cls}`;$('#status').textContent=title;$('#message').textContent=message;
-    $('#metrics').innerHTML=[
-      metric('判定',state),metric('四邊信心',pct(det.confidence)),metric('偵測策略',det.strategy||'none'),metric('邊線支撐',pct(det.edgeSupport)),metric('內容密度',pct(det.contentDensity)),metric('內容貼合',pct(det.contentFit)),metric('表面一致性',pct(det.surfaceConsistency)),metric('整體品質',quality.overall??'—'),metric('清晰度',quality.blur??'—'),metric('亮度',quality.brightness??'—'),metric('反光分數',quality.glare??'—'),metric('Working',metadata.working?`${metadata.working.width}×${metadata.working.height}`:'—'),metric('Analysis',metadata.analysis?`${metadata.analysis.width}×${metadata.analysis.height}`:'—')
-    ].join('');
-    $('#source').onload=()=>drawCorners(metadata);if($('#source').complete)drawCorners(metadata);
-    if(result.file){outputUrl=URL.createObjectURL(result.file);$('#output').src=outputUrl;$('#outputCard').hidden=false;}
-    $('#raw').textContent=JSON.stringify(metadata,null,2);$('#rawCard').hidden=false;
-  }catch(error){$('#status').className='status bad';$('#status').textContent='處理失敗';$('#message').textContent=error.message||'未知錯誤';$('#raw').textContent=String(error.stack||error);$('#rawCard').hidden=false;}
-}
+function drawCorners(metadata){const image=$('#source'),canvas=$('#overlay'),corners=metadata?.corners||[],width=image.clientWidth,height=image.clientHeight,ratio=window.devicePixelRatio||1;canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);canvas.style.width=`${width}px`;canvas.style.height=`${height}px`;const ctx=canvas.getContext('2d');ctx.scale(ratio,ratio);ctx.clearRect(0,0,width,height);if(corners.length!==4)return;const pts=corners.map((p)=>({x:p.x*width,y:p.y*height}));ctx.lineWidth=3;ctx.strokeStyle='#00a86b';ctx.fillStyle='#00a86b';ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.stroke();for(const p of pts){ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);ctx.fill();}}
+function renderCandidates(items=[]){$('#candidates').innerHTML=items.length?`<h3>候選比較</h3>${items.map((c,i)=>`<div class="candidate"><strong>${i===0?'★ ':''}${c.strategy||'unknown'} · ${pct(c.confidence)}</strong><span>內容密度 ${pct(c.contentDensity)}｜內容貼合 ${pct(c.contentFit)}｜表面一致性 ${pct(c.surfaceConsistency)}｜邊線支撐 ${pct(c.edgeSupport)}｜畫面占比 ${pct(c.coverage)}</span></div>`).join('')}`:'';}
+async function run(file){clearUrls();if(!file)return;sourceUrl=URL.createObjectURL(file);$('#source').src=sourceUrl;$('#preview').style.display='block';$('#diagnostic').hidden=false;$('#outputCard').hidden=true;$('#rawCard').hidden=true;$('#status').className='status warn';$('#status').textContent='分析中…';$('#message').textContent='正在比較三種候選：幾何、長邊、文字引導。';$('#metrics').innerHTML='';$('#candidates').innerHTML='';try{const result=await processBusinessCardImage(file),metadata=result.metadata||{},quality=metadata.quality||{},det=metadata.detection||{},warning=String(metadata.warning||'');let state='manual',title='需要人工裁切',cls='warn',message=warning||'候選信心不足，建議人工確認。';if(result.file){state='auto';title='自動補正成功';cls='ok';message='最佳候選通過驗證，可進 OCR Gate。';}else if(/未完整入鏡|貼近照片邊界|重新拍攝/.test(warning)){state='retake';title='建議重新拍攝';cls='bad';message=warning;}$('#status').className=`status ${cls}`;$('#status').textContent=title;$('#message').textContent=message;$('#metrics').innerHTML=[metric('判定',state),metric('四邊信心',pct(det.confidence)),metric('勝出策略',det.strategy||'none'),metric('候選數',det.candidateCount??0),metric('內容密度',pct(det.contentDensity)),metric('內容貼合',pct(det.contentFit)),metric('表面一致性',pct(det.surfaceConsistency)),metric('邊線支撐',pct(det.edgeSupport)),metric('整體品質',quality.overall??'—'),metric('清晰度',quality.blur??'—'),metric('亮度',quality.brightness??'—'),metric('反光分數',quality.glare??'—'),metric('Working',metadata.working?`${metadata.working.width}×${metadata.working.height}`:'—'),metric('Analysis',metadata.analysis?`${metadata.analysis.width}×${metadata.analysis.height}`:'—')].join('');renderCandidates(det.candidates||[]);$('#source').onload=()=>drawCorners(metadata);if($('#source').complete)drawCorners(metadata);if(result.file){outputUrl=URL.createObjectURL(result.file);$('#output').src=outputUrl;$('#outputCard').hidden=false;}$('#raw').textContent=JSON.stringify(metadata,null,2);$('#rawCard').hidden=false;}catch(error){$('#status').className='status bad';$('#status').textContent='處理失敗';$('#message').textContent=error.message||'未知錯誤';$('#raw').textContent=String(error.stack||error);$('#rawCard').hidden=false;}}
 $('#camera').onchange=(e)=>run(e.target.files?.[0]);$('#gallery').onchange=(e)=>run(e.target.files?.[0]);window.addEventListener('beforeunload',clearUrls);
 </script>
 </body>
