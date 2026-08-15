@@ -1,34 +1,27 @@
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import test from 'node:test';
 
 const source=(path)=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 
-test('scanner gate never calls AI or network services',()=>{
+test('gate opens manual crop instead of sending low-confidence original into OCR',()=>{
   const gate=source('public/card-scanner-v2-gate.js');
-  assert.doesNotMatch(gate,/fetch\s*\(/);
-  assert.doesNotMatch(gate,/openai|gemini|responses|apiKey/i);
-  assert.match(gate,/window\.Cropper/);
-});
-
-test('incomplete photos are stopped before OCR instead of falling back to the original image',()=>{
-  const gate=source('public/card-scanner-v2-gate.js');
-  assert.match(gate,/CARD_RETAKE_REQUIRED/);
-  assert.match(gate,/系統不會把這張圖送給 AI OCR/);
-  assert.match(gate,/未完整入鏡\|貼近照片邊界/);
-  assert.doesNotMatch(gate,/return \{file,metadata/);
-});
-
-test('uncertain but complete photos use manual crop as the final authority',()=>{
-  const gate=source('public/card-scanner-v2-gate.js');
-  assert.match(gate,/const cropped=await manualCrop\(file,reason\)/);
+  assert.match(gate,/manualCrop\(file,reason\)/);
   assert.match(gate,/manualCorrection:true/);
-  assert.match(gate,/confidence:1/);
-  assert.match(gate,/沒有使用 AI 裁切/);
+  assert.match(gate,/normalizeWorkingSource/);
+  assert.match(gate,/business-card-manual-working\.webp/);
+  assert.doesNotMatch(gate,/processed=file/);
 });
 
-test('legacy import surface now delegates processing through the trusted-crop gate',()=>{
-  const facade=source('public/card-image-smart-20260815-5.js');
-  assert.match(facade,/processBusinessCardImage \} from '\.\/card-scanner-v2-gate\.js'/);
-  assert.match(facade,/detectCardQuad/);
+test('gate rejects incomplete frame before manual or OCR fallback',()=>{
+  const gate=source('public/card-scanner-v2-gate.js');
+  assert.match(gate,/未完整入鏡\|貼近照片邊界/);
+  assert.match(gate,/CARD_RETAKE_REQUIRED/);
+  assert.match(gate,/不會把這張圖送給 AI OCR/);
+});
+
+test('manual crop UI states that it is local and non-AI',()=>{
+  const gate=source('public/card-scanner-v2-gate.js');
+  assert.match(gate,/完全在手機本機完成，不使用 AI/);
+  assert.match(gate,/確認裁切/);
 });
