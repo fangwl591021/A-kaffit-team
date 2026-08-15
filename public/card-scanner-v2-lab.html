@@ -11,8 +11,8 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-seri
 <body>
 <div class="wrap">
   <section class="card">
-    <h1>Card Scanner V2 Lab</h1>
-    <p class="muted">只在手機／瀏覽器本機執行，不上傳照片、不呼叫 OCR、不使用 AI token。用來驗證四角、完整度、品質與自動裁切結果。</p>
+    <h1>Card Scanner V2.3 Lab</h1>
+    <p class="muted">只在手機／瀏覽器本機執行，不上傳照片、不呼叫 OCR、不使用 AI token。V2.3 會同時檢查邊線、內容密度、內容貼合與表面一致性。</p>
     <div class="actions">
       <label class="btn">📷 拍照測試<input id="camera" type="file" accept="image/*" capture="environment"></label>
       <label class="btn secondary">▧ 相簿選圖<input id="gallery" type="file" accept="image/*"></label>
@@ -25,9 +25,9 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-seri
     <div class="preview" id="preview"><img id="source"><canvas class="overlay" id="overlay"></canvas></div>
   </section>
   <section class="card" id="outputCard" hidden>
-    <strong>V2 補正輸出</strong>
-    <p class="muted">只有自動裁切成功才會產生；若需要人工裁切或重拍，這裡保持空白。</p>
-    <img id="output" class="result-image" alt="V2 補正結果">
+    <strong>V2.3 補正輸出</strong>
+    <p class="muted">只有候選矩形同時通過幾何與內容驗證才會產生；若需要人工裁切或重拍，這裡保持空白。</p>
+    <img id="output" class="result-image" alt="V2.3 補正結果">
   </section>
   <section class="card" id="rawCard" hidden>
     <strong>診斷資料</strong>
@@ -54,16 +54,16 @@ function drawCorners(metadata){
 async function run(file){
   clearUrls();if(!file)return;
   sourceUrl=URL.createObjectURL(file);$('#source').src=sourceUrl;$('#preview').style.display='block';
-  $('#diagnostic').hidden=false;$('#outputCard').hidden=true;$('#rawCard').hidden=true;$('#status').className='status warn';$('#status').textContent='分析中…';$('#message').textContent='本機正在建立 Working / Analysis Image 並執行雙引擎四邊偵測。';$('#metrics').innerHTML='';
+  $('#diagnostic').hidden=false;$('#outputCard').hidden=true;$('#rawCard').hidden=true;$('#status').className='status warn';$('#status').textContent='分析中…';$('#message').textContent='本機正在建立 Working / Analysis Image 並執行 V2.3 候選驗證。';$('#metrics').innerHTML='';
   try{
     const result=await processBusinessCardImage(file),metadata=result.metadata||{},quality=metadata.quality||{},det=metadata.detection||{};
     const warning=String(metadata.warning||'');
     let state='manual',title='需要人工裁切',cls='warn',message=warning||'自動定位信心不足，建議人工確認。';
-    if(result.file){state='auto';title='自動補正成功';cls='ok';message='四角、完整度與品質通過，可進 OCR Gate。';}
+    if(result.file){state='auto';title='自動補正成功';cls='ok';message='四角、幾何與內容驗證通過，可進 OCR Gate。';}
     else if(/未完整入鏡|貼近照片邊界|重新拍攝/.test(warning)){state='retake';title='建議重新拍攝';cls='bad';message=warning;}
     $('#status').className=`status ${cls}`;$('#status').textContent=title;$('#message').textContent=message;
     $('#metrics').innerHTML=[
-      metric('判定',state),metric('四邊信心',pct(det.confidence)),metric('偵測策略',det.strategy||'none'),metric('整體品質',quality.overall??'—'),metric('清晰度',quality.blur??'—'),metric('亮度',quality.brightness??'—'),metric('反光分數',quality.glare??'—'),metric('Working',metadata.working?`${metadata.working.width}×${metadata.working.height}`:'—'),metric('Analysis',metadata.analysis?`${metadata.analysis.width}×${metadata.analysis.height}`:'—')
+      metric('判定',state),metric('四邊信心',pct(det.confidence)),metric('偵測策略',det.strategy||'none'),metric('邊線支撐',pct(det.edgeSupport)),metric('內容密度',pct(det.contentDensity)),metric('內容貼合',pct(det.contentFit)),metric('表面一致性',pct(det.surfaceConsistency)),metric('整體品質',quality.overall??'—'),metric('清晰度',quality.blur??'—'),metric('亮度',quality.brightness??'—'),metric('反光分數',quality.glare??'—'),metric('Working',metadata.working?`${metadata.working.width}×${metadata.working.height}`:'—'),metric('Analysis',metadata.analysis?`${metadata.analysis.width}×${metadata.analysis.height}`:'—')
     ].join('');
     $('#source').onload=()=>drawCorners(metadata);if($('#source').complete)drawCorners(metadata);
     if(result.file){outputUrl=URL.createObjectURL(result.file);$('#output').src=outputUrl;$('#outputCard').hidden=false;}
