@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Card Scanner V2 Lab</title>
 <style>
-body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f7f9;color:#222}.wrap{max-width:820px;margin:auto;padding:20px}.card{background:#fff;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 4px 18px #0001}h1{font-size:22px;margin:0 0 8px}.muted{color:#666;font-size:14px;line-height:1.6}.actions{display:flex;gap:10px;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:12px;padding:12px 16px;background:#222;color:#fff;font-weight:700;cursor:pointer}.btn.secondary{background:#e9ebef;color:#222}input[type=file]{display:none}.preview{position:relative;display:none;margin-top:14px}.preview img,.preview canvas{display:block;width:100%;height:auto;border-radius:12px}.overlay{position:absolute;inset:0;pointer-events:none}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{background:#f4f5f7;border-radius:10px;padding:10px}.metric small{display:block;color:#666}.metric b{display:block;font-size:18px;margin-top:4px}.status{font-weight:800;font-size:18px}.ok{color:#16803b}.warn{color:#a86400}.bad{color:#b42318}.result-image{max-width:100%;border-radius:12px;margin-top:10px}pre{white-space:pre-wrap;word-break:break-word;background:#101317;color:#d8f3dc;padding:12px;border-radius:10px;font-size:12px}@media(max-width:600px){.grid{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f6f7f9;color:#222}.wrap{max-width:820px;margin:auto;padding:20px}.card{background:#fff;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 4px 18px #0001}h1{font-size:22px;margin:0 0 8px}.muted{color:#666;font-size:14px;line-height:1.6}.actions{display:flex;gap:10px;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:12px;padding:12px 16px;background:#222;color:#fff;font-weight:700;cursor:pointer}.btn.secondary{background:#e9ebef;color:#222}input[type=file]{display:none}.preview{position:relative;display:none;margin-top:14px}.preview img,.preview canvas{display:block;width:100%;height:auto;border-radius:12px}.overlay{position:absolute;inset:0;pointer-events:none}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{background:#f4f5f7;border-radius:10px;padding:10px}.metric small{display:block;color:#666}.metric b{display:block;font-size:18px;margin-top:4px;word-break:break-word}.status{font-weight:800;font-size:18px}.ok{color:#16803b}.warn{color:#a86400}.bad{color:#b42318}.result-image{max-width:100%;border-radius:12px;margin-top:10px}pre{white-space:pre-wrap;word-break:break-word;background:#101317;color:#d8f3dc;padding:12px;border-radius:10px;font-size:12px}@media(max-width:600px){.grid{grid-template-columns:1fr 1fr}.wrap{padding:12px}}
 </style>
 </head>
 <body>
@@ -36,7 +36,6 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-seri
 </div>
 <script type="module">
 import { processBusinessCardImage } from './card-scanner-v2-runtime.js';
-
 const $=(s)=>document.querySelector(s);
 let sourceUrl='',outputUrl='';
 function clearUrls(){if(sourceUrl)URL.revokeObjectURL(sourceUrl);if(outputUrl)URL.revokeObjectURL(outputUrl);sourceUrl='';outputUrl='';}
@@ -53,10 +52,9 @@ function drawCorners(metadata){
   for(const p of pts){ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);ctx.fill();}
 }
 async function run(file){
-  clearUrls();
-  if(!file)return;
+  clearUrls();if(!file)return;
   sourceUrl=URL.createObjectURL(file);$('#source').src=sourceUrl;$('#preview').style.display='block';
-  $('#diagnostic').hidden=false;$('#outputCard').hidden=true;$('#rawCard').hidden=true;$('#status').className='status warn';$('#status').textContent='分析中…';$('#message').textContent='本機正在建立 Working / Analysis Image 並執行四邊偵測。';$('#metrics').innerHTML='';
+  $('#diagnostic').hidden=false;$('#outputCard').hidden=true;$('#rawCard').hidden=true;$('#status').className='status warn';$('#status').textContent='分析中…';$('#message').textContent='本機正在建立 Working / Analysis Image 並執行雙引擎四邊偵測。';$('#metrics').innerHTML='';
   try{
     const result=await processBusinessCardImage(file),metadata=result.metadata||{},quality=metadata.quality||{},det=metadata.detection||{};
     const warning=String(metadata.warning||'');
@@ -65,14 +63,12 @@ async function run(file){
     else if(/未完整入鏡|貼近照片邊界|重新拍攝/.test(warning)){state='retake';title='建議重新拍攝';cls='bad';message=warning;}
     $('#status').className=`status ${cls}`;$('#status').textContent=title;$('#message').textContent=message;
     $('#metrics').innerHTML=[
-      metric('判定',state),metric('四邊信心',pct(det.confidence)),metric('整體品質',quality.overall??'—'),metric('清晰度',quality.blur??'—'),metric('亮度',quality.brightness??'—'),metric('反光分數',quality.glare??'—'),metric('Working',metadata.working?`${metadata.working.width}×${metadata.working.height}`:'—'),metric('Analysis',metadata.analysis?`${metadata.analysis.width}×${metadata.analysis.height}`:'—')
+      metric('判定',state),metric('四邊信心',pct(det.confidence)),metric('偵測策略',det.strategy||'none'),metric('整體品質',quality.overall??'—'),metric('清晰度',quality.blur??'—'),metric('亮度',quality.brightness??'—'),metric('反光分數',quality.glare??'—'),metric('Working',metadata.working?`${metadata.working.width}×${metadata.working.height}`:'—'),metric('Analysis',metadata.analysis?`${metadata.analysis.width}×${metadata.analysis.height}`:'—')
     ].join('');
     $('#source').onload=()=>drawCorners(metadata);if($('#source').complete)drawCorners(metadata);
     if(result.file){outputUrl=URL.createObjectURL(result.file);$('#output').src=outputUrl;$('#outputCard').hidden=false;}
     $('#raw').textContent=JSON.stringify(metadata,null,2);$('#rawCard').hidden=false;
-  }catch(error){
-    $('#status').className='status bad';$('#status').textContent='處理失敗';$('#message').textContent=error.message||'未知錯誤';$('#raw').textContent=String(error.stack||error);$('#rawCard').hidden=false;
-  }
+  }catch(error){$('#status').className='status bad';$('#status').textContent='處理失敗';$('#message').textContent=error.message||'未知錯誤';$('#raw').textContent=String(error.stack||error);$('#rawCard').hidden=false;}
 }
 $('#camera').onchange=(e)=>run(e.target.files?.[0]);$('#gallery').onchange=(e)=>run(e.target.files?.[0]);window.addEventListener('beforeunload',clearUrls);
 </script>
