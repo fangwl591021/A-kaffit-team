@@ -1,6 +1,7 @@
 import { CARD_SCANNER_RESOLUTION, canvasToCardFile, normalizeCardSource } from './card-scanner-v2-resolution.js';
 
-const originalFetch=window.fetch.bind(window);
+const browser=typeof window!=='undefined'&&typeof window.fetch==='function';
+const originalFetch=browser?window.fetch.bind(window):null;
 let installed=false;
 
 function isCardImageUpload(input,init={}){
@@ -13,12 +14,11 @@ function isCardImageUpload(input,init={}){
 async function normalizedUploadBody(file){
   const {workingCanvas,plan}=await normalizeCardSource(file,{workingLongEdge:CARD_SCANNER_RESOLUTION.workingLongEdge,analysisLongEdge:CARD_SCANNER_RESOLUTION.analysisLongEdge});
   if(plan.working.width===plan.input.width&&plan.working.height===plan.input.height)return file;
-  const normalized=await canvasToCardFile(workingCanvas,'business-card-working.webp',.88);
-  return normalized;
+  return canvasToCardFile(workingCanvas,'business-card-working.webp',.88);
 }
 
 export function installCardUploadNormalizer(){
-  if(installed)return;
+  if(!browser||installed)return;
   installed=true;
   window.fetch=async (input,init={})=>{
     if(!isCardImageUpload(input,init))return originalFetch(input,init);
