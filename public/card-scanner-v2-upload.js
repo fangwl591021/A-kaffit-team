@@ -13,8 +13,12 @@ function isCardImageUpload(input,init={}){
 
 async function normalizedUploadBody(file){
   const {workingCanvas,plan}=await normalizeCardSource(file,{workingLongEdge:CARD_SCANNER_RESOLUTION.workingLongEdge,analysisLongEdge:CARD_SCANNER_RESOLUTION.analysisLongEdge});
-  if(plan.working.width===plan.input.width&&plan.working.height===plan.input.height)return file;
-  return canvasToCardFile(workingCanvas,'business-card-working.webp',.88);
+  try{
+    if(plan.working.width===plan.input.width&&plan.working.height===plan.input.height)return file;
+    return await canvasToCardFile(workingCanvas,'business-card-working.webp',.88);
+  }finally{
+    workingCanvas.width=1;workingCanvas.height=1;
+  }
 }
 
 export function installCardUploadNormalizer(){
