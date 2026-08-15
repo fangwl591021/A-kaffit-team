@@ -1,3 +1,5 @@
+import './card-scanner-v2-upload.js';
+
 export {
   CARD_IMAGE_THRESHOLDS,
   assessCardCompleteness,
