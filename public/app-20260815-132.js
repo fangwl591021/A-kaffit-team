@@ -769,12 +769,12 @@ async function setCalendarLabelVisible(label, visible) {
 }
 async function createCalendarLabelPrompt(suggestedName = "") {
   const initial = typeof suggestedName === "string" ? suggestedName : "";
-  const name = prompt("建立行事曆標籤，例如：工作、家庭、約訪、學習", initial);
+  const name = await appPrompt("建立行事曆標籤，例如：工作、家庭、約訪、學習", initial,{title:"新增標籤",placeholder:"例如：工作"});
   if (!name?.trim()) return null;
   const cleanName = name.trim();
   const suggestedColors = { "工作":"#345bdb", "家庭":"#d49121", "約訪":"#b65d79", "學習":"#8246ee" };
   const current = state.calendarLabels.find((label) => label.sourceType === "custom" && label.name.trim().toLocaleLowerCase("zh-TW") === cleanName.toLocaleLowerCase("zh-TW"));
-  const color = prompt("標籤顏色（HEX 色碼）", current?.color || suggestedColors[cleanName] || "#52637d") || current?.color || "#52637d";
+  const color = (await appPrompt("標籤顏色（HEX 色碼）", current?.color || suggestedColors[cleanName] || "#52637d",{title:"設定標籤顏色",placeholder:"#52637d"})) || current?.color || "#52637d";
   const result = await api("/v1/personal-calendar/labels", { method:"POST", body:JSON.stringify({ name:cleanName, color }) });
   if (!result.label) return null;
   const existingIndex = state.calendarLabels.findIndex((label) => label.id === result.label.id);
@@ -928,7 +928,7 @@ function openCalendarEventDialog(event = null) {
     catch (error) { alert(error.message || "行程儲存失敗"); }
   };
   const deleteButton = dialog.querySelector("[data-delete]");
-  if (deleteButton) deleteButton.onclick = async () => { if (!confirm("確定刪除這筆行程？")) return; try { await withActionFeedback(deleteButton, async () => { await api(`/v1/personal-calendar/events/${encodeURIComponent(event.id)}`, { method:"DELETE" }); dialog.close(); await reloadPersonalCalendar(); }, { busy:"刪除中…", success:"已刪除" }); } catch (error) { alert(error.message || "刪除失敗"); } };
+  if (deleteButton) deleteButton.onclick = async () => { if (!(await appConfirm("確定刪除這筆行程？",{danger:true,okText:"刪除"}))) return; try { await withActionFeedback(deleteButton, async () => { await api(`/v1/personal-calendar/events/${encodeURIComponent(event.id)}`, { method:"DELETE" }); dialog.close(); await reloadPersonalCalendar(); }, { busy:"刪除中…", success:"已刪除" }); } catch (error) { alert(error.message || "刪除失敗"); } };
   dialog.showModal();
 }
 function renderPersonalCalendarView() {
@@ -955,7 +955,7 @@ function renderPersonalCalendarView() {
   layout(`${reminderHtml}<section class="personal-calendar-labels"><header><div><small>顯示篩選</small><h2>我的行事曆標籤</h2></div><button id="calendarAddLabel" type="button">＋ 自訂標籤</button></header><p class="muted">點擊標籤可顯示／隱藏行事曆內容。</p><div>${labelHtml}</div></section><section class="personal-calendar-card"><header class="personal-calendar-toolbar"><button id="calendarPrev" type="button">‹</button><div><small>PERSONAL CALENDAR</small><h2>${year} 年 ${month} 月</h2></div><button id="calendarNext" type="button">›</button></header><div class="personal-calendar-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div><div class="personal-calendar-grid">${cells.join("")}</div><div class="personal-calendar-sync-note"><span>●</span> 本月顯示 ${monthSessions.length} 項個人與生日行程</div></section><section class="personal-calendar-agenda"><header><div><small>當日行程</small><h2>${esc(selectedLabel)}</h2></div><div><button id="calendarToday" type="button">今天</button><button id="calendarAddEvent" type="button">＋ 行程</button></div></header>${eventHtml}</section>`);
   document.querySelectorAll("[data-calendar-date]").forEach((button)=>button.onclick=()=>{state.calendarSelectedDate=button.dataset.calendarDate||"";renderPersonalCalendarView();});
   document.querySelectorAll("[data-label-toggle]").forEach((button)=>button.onclick=async()=>{const label=state.calendarLabels.find((item)=>item.id===button.dataset.labelToggle);if(!label)return;button.disabled=true;try{await setCalendarLabelVisible(label,!label.visible);}catch(error){alert(error.message||"標籤更新失敗");button.disabled=false;}});
-  document.querySelectorAll("[data-label-delete]").forEach((button)=>button.onclick=async()=>{const label=state.calendarLabels.find((item)=>item.id===button.dataset.labelDelete);if(!label||label.system)return;if(!confirm(`刪除「${label.name}」標籤？標籤內的行程會移到「未分類」。`))return;button.disabled=true;try{await api(`/v1/personal-calendar/labels/${encodeURIComponent(label.id)}`,{method:"DELETE"});await reloadPersonalCalendar();}catch(error){alert(error.message||"標籤刪除失敗");button.disabled=false;}});
+  document.querySelectorAll("[data-label-delete]").forEach((button)=>button.onclick=async()=>{const label=state.calendarLabels.find((item)=>item.id===button.dataset.labelDelete);if(!label||label.system)return;if(!(await appConfirm(`刪除「${label.name}」標籤？標籤內的行程會移到「未分類」。`,{danger:true,okText:"刪除"})))return;button.disabled=true;try{await api(`/v1/personal-calendar/labels/${encodeURIComponent(label.id)}`,{method:"DELETE"});await reloadPersonalCalendar();}catch(error){alert(error.message||"標籤刪除失敗");button.disabled=false;}});
   document.querySelectorAll("[data-edit-event]").forEach((button)=>button.onclick=()=>openCalendarEventDialog(state.calendarSessions.find((event)=>event.id===button.dataset.editEvent)));
   $("#calendarAddLabel").onclick=async()=>{try{const label=await createCalendarLabelPrompt();if(label)renderPersonalCalendarView();}catch(error){alert(error.message||"標籤建立失敗");}};
   $("#calendarAddEvent").onclick=()=>openCalendarEventDialog();
@@ -1007,16 +1007,16 @@ async function taskAction(task,action){
   let body={action};
   if(action==="postpone"){
     const initial=taskLocalValue(new Date(Date.parse(task.dueAt)+86400000));
-    const value=prompt("延期到何時？請輸入 YYYY-MM-DDTHH:mm",initial);
+    const value=await appPrompt("延期到何時？請輸入 YYYY-MM-DDTHH:mm",initial,{title:"延期任務"});
     if(!value)return;
     body.dueAt=new Date(value).toISOString();
   }
   if(action==="note"){
-    const note=prompt("新增 CRM 紀錄");
+    const note=await appPrompt("新增 CRM 紀錄","",{title:"CRM 紀錄",placeholder:"輸入本次聯繫或進度"});
     if(!note?.trim())return;
     body.note=note.trim();
   }
-  if(action==="cancel"&&!confirm(`確定取消「${task.title}」？`))return;
+  if(action==="cancel"&&!(await appConfirm(`確定取消「${task.title}」？`,{danger:true,okText:"取消任務"})))return;
   await api(`/v1/tasks/${encodeURIComponent(task.id)}/action`,{method:"PATCH",body:JSON.stringify(body)});
   await taskCenter();
   if(["complete","cancel","note"].includes(action))setTimeout(()=>{if(state.tab==="tasks")taskCenter()},1800);
@@ -2735,7 +2735,7 @@ function showCollectionReview(eventId, card, confidence) {
   $("#cancelCollectionReview").onclick=()=>cardCollection();
   $("#saveScannedCard").onclick=async()=>{const button=$("#saveScannedCard");try{await withActionFeedback(button,async()=>{
     const save=async(action="")=>{const response=await fetch(`/v1/card-collection/imports/${encodeURIComponent(eventId)}/confirm`,{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${state.token}`},body:JSON.stringify({card:readCollectionForm("scan"),duplicateAction:action})});const body=await response.json();return {response,body};};
-    let result=await save();if(result.response.status===409&&result.body.code==="duplicate_contact"&&confirm(`收藏名單已有「${result.body.duplicate?.displayName || "相同名片"}」，要用這次資料更新嗎？更新既有名片不會重複贈點。`))result=await save("update");if(!result.response.ok)throw new Error(result.body.error||"名片儲存失敗");
+    let result=await save();if(result.response.status===409&&result.body.code==="duplicate_contact"&&(await appConfirm(`收藏名單已有「${result.body.duplicate?.displayName || "相同名片"}」，要用這次資料更新嗎？更新既有名片不會重複贈點。`,{title:"發現重複名片",okText:"更新既有名片"})))result=await save("update");if(!result.response.ok)throw new Error(result.body.error||"名片儲存失敗");
     if(collectionVisionCropFile && !result.body.updated && result.body.card?.id){
       const cropForm=new FormData();cropForm.append('image',collectionVisionCropFile);
       const cropResponse=await fetch(`/v1/card-collection/${encodeURIComponent(result.body.card.id)}/manual-crop`,{method:'POST',headers:{authorization:`Bearer ${state.token}`,'x-skip-reverify':'1'},body:cropForm});
@@ -2824,7 +2824,7 @@ async function showContactEditor(card) {
     bindCollectionIndustryEditor();
     bindCollectionWebsiteNormalizer("contact");
     $("#collectionCardForm").onsubmit=async(event)=>{event.preventDefault();const button=event.submitter;try{const updated=await withActionFeedback(button,()=>api(`/v1/card-collection/${encodeURIComponent(card.id)}`,{method:"PATCH",body:JSON.stringify({ ...readCollectionForm(), crmProfile:readCollectionCrmProfile(), industry:readCollectionIndustry(), selectedVersion:card.selectedVersion, versions:card.versions, chatAltText:card.chatAltText })}),{busy:"儲存中…",success:"已儲存，AI 將在背景補強"});Object.assign(card,updated.card);state.collectionCardView="contact";showContactEditor(card);}catch(error){alert(error.message)}};
-    $("#deleteContact").onclick=async()=>{if(!confirm(`確定刪除「${card.displayName}」？圖片也會一併刪除並釋放空間。`))return;try{const result=await api(`/v1/card-collection/${encodeURIComponent(card.id)}`,{method:"DELETE"});alert(result.reversedPoints?`已刪除，已扣回 ${result.reversedPoints} 點`:"已刪除");state.collectionCardView="";cardCollection();}catch(error){alert(error.message)}};
+    $("#deleteContact").onclick=async()=>{if(!(await appConfirm(`確定刪除「${card.displayName}」？圖片也會一併刪除並釋放空間。`,{danger:true,okText:"刪除"})))return;try{const result=await api(`/v1/card-collection/${encodeURIComponent(card.id)}`,{method:"DELETE"});alert(result.reversedPoints?`已刪除，已扣回 ${result.reversedPoints} 點`:"已刪除");state.collectionCardView="";cardCollection();}catch(error){alert(error.message)}};
     return;
   }
   if (view !== "digital") return;
@@ -2839,7 +2839,7 @@ async function showContactEditor(card) {
   $("#lineSourceImageFile").onchange=async()=>{try{const file=$("#lineSourceImageFile").files?.[0];if(file)await openCardCropper(file,selected.id,async()=>persistLineSourceCard(editorContext));}catch(error){alert(error.message)}};
   $("#aiExpandContactContent").onclick=()=>openContactContentSuggestions(editorContext);
   $("#shareCollectedCard").onclick=async()=>{try{await beginCollectedCardShare(card,card);}catch(error){alert(error.message||"名片分享失敗")}};
-  $("#stopCollectedCardShare").onclick=async()=>{if(!confirm("確定停止這張名片目前的公開分享？舊網址將立即失效。"))return;try{await api(`/v1/card-collection/${encodeURIComponent(card.id)}/share`,{method:"DELETE"});alert("已停止分享");}catch(error){alert(error.message)}};
+  $("#stopCollectedCardShare").onclick=async()=>{if(!(await appConfirm("確定停止這張名片目前的公開分享？舊網址將立即失效。",{danger:true,okText:"停止分享"})))return;try{await api(`/v1/card-collection/${encodeURIComponent(card.id)}/share`,{method:"DELETE"});alert("已停止分享");}catch(error){alert(error.message)}};
   $("#showMyCardQr").onclick=()=>alert("公開連結會在分享電子名片時建立。");
 }
 
