@@ -1,5 +1,6 @@
 import { CARD_IMAGE_THRESHOLDS } from './card-scanner-v2.js';
 import { processBusinessCardImage as scanBusinessCardImage } from './card-scanner-v2-runtime.js';
+import { CARD_SCANNER_RESOLUTION, canvasToCardFile, normalizeCardSource } from './card-scanner-v2-resolution.js';
 
 function retakeError(message){
   const error=new Error(message);
@@ -13,9 +14,19 @@ function ensureManualCropModal(){
   document.body.insertAdjacentHTML('beforeend',`<div class="card-cropper-modal" id="scannerV2ManualCropModal" role="dialog" aria-modal="true"><div class="card-cropper-sheet"><div class="card-cropper-head"><strong>確認名片範圍</strong><button type="button" data-scanner-crop-close>×</button></div><p style="margin:0 0 10px;font-size:13px;line-height:1.5" data-scanner-crop-reason></p><div class="card-cropper-stage"><img data-scanner-crop-image alt="名片手動裁切"></div><div class="card-cropper-tools"><button type="button" data-scanner-crop-action="zoom-out">縮小</button><button type="button" data-scanner-crop-action="zoom-in">放大</button><button type="button" data-scanner-crop-action="rotate">旋轉</button><button type="button" data-scanner-crop-action="reset">重設</button></div><div class="card-cropper-actions"><button type="button" class="btn alt" data-scanner-crop-cancel>取消</button><button type="button" class="btn" data-scanner-crop-confirm>確認裁切</button></div></div></div>`);
   return document.getElementById('scannerV2ManualCropModal');
 }
+async function manualWorkingFile(file){
+  const {workingCanvas,plan}=await normalizeCardSource(file,{workingLongEdge:CARD_SCANNER_RESOLUTION.workingLongEdge,analysisLongEdge:CARD_SCANNER_RESOLUTION.analysisLongEdge});
+  try{
+    if(plan.working.width===plan.input.width&&plan.working.height===plan.input.height)return file;
+    return await canvasToCardFile(workingCanvas,'business-card-manual-working.webp',.9);
+  }finally{
+    workingCanvas.width=1;workingCanvas.height=1;
+  }
+}
 async function manualCrop(file,reason){
   if(typeof window==='undefined'||!window.Cropper)throw retakeError(`${reason}；目前無法開啟手動裁切，請重新拍攝。`);
-  const modal=ensureManualCropModal(),image=modal.querySelector('[data-scanner-crop-image]'),reasonNode=modal.querySelector('[data-scanner-crop-reason]'),objectUrl=URL.createObjectURL(file);
+  const safeFile=await manualWorkingFile(file);
+  const modal=ensureManualCropModal(),image=modal.querySelector('[data-scanner-crop-image]'),reasonNode=modal.querySelector('[data-scanner-crop-reason]'),objectUrl=URL.createObjectURL(safeFile);
   reasonNode.textContent=`${reason}。請框選完整名片後確認；這一步完全在手機本機完成，不使用 AI。`;
   modal.classList.add('open');image.src=objectUrl;
   await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error('名片圖片讀取失敗'));});
