@@ -71,25 +71,25 @@ test('v2.4 adds a local text-guided candidate without OCR or network calls',()=>
   assert.doesNotMatch(guided,/openai|gemini|recognize|ocr/i);
 });
 
-test('v2.4 runtime compares geometry long-border and text-guided candidates together',()=>{
+test('v2.4 runtime requires multi-detector consensus before automatic crop',()=>{
   const runtime=source('public/card-scanner-v2-runtime.js');
-  assert.match(runtime,/detectCardQuad\(imageData\)/);
-  assert.match(runtime,/detectLongBorderQuad\(imageData\)/);
-  assert.match(runtime,/detectTextGuidedCard\(imageData\)/);
-  assert.match(runtime,/chooseCandidate/);
-  assert.match(runtime,/candidateScore/);
-  assert.match(runtime,/candidateCount/);
-  assert.match(runtime,/candidates:/);
+  assert.match(runtime,/boxIou/);
+  assert.match(runtime,/consensusApproved/);
+  assert.match(runtime,/consensusIou/);
+  assert.match(runtime,/if\(!selection\.consensus\.approved\)return/);
+  assert.match(runtime,/text-guided is advisory and can never be sole authority/);
+  assert.match(runtime,/edge-hough \+ text-guided/);
+  assert.match(runtime,/long-border \+ text-guided/);
 });
 
-test('scanner lab exposes v2.4 candidate comparison while remaining zero-token',()=>{
+test('scanner lab exposes consensus diagnostics while remaining zero-token',()=>{
   const lab=source('public/card-scanner-v2-lab.html');
   assert.match(lab,/Card Scanner V2\.4 Lab/);
   assert.match(lab,/候選比較/);
-  assert.match(lab,/文字引導/);
-  assert.match(lab,/內容密度/);
-  assert.match(lab,/內容貼合/);
-  assert.match(lab,/表面一致性/);
+  assert.match(lab,/一致性/);
+  assert.match(lab,/一致來源/);
+  assert.match(lab,/重疊比例/);
+  assert.match(lab,/任何單一偵測器都不能獨立觸發自動裁切/);
   assert.doesNotMatch(lab,/fetch\(/);
   assert.doesNotMatch(lab,/\/recognize/);
 });
