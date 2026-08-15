@@ -1,5 +1,3 @@
-import { CARD_IMAGE_THRESHOLDS, processBusinessCardImage } from "/card-image-smart-20260815-5.js";
-
 const OFFICIAL_PAGES = {
   home: "https://www.k-link.com.tw/",
   about: "https://www.k-link.com.tw/about-us%E8%B5%B0%E9%80%B2%E5%BA%B7%E7%AB%8B",
@@ -25,25 +23,6 @@ function cameraEntryNotice() {
   if (realLiffClient()) return "";
   const url = mainLiffUrl({ camera_probe:"android" });
   return `<aside class="liff-camera-notice" role="status"><strong>Android 拍照請從 LIFF 開啟</strong><span>目前不是 LIFF Browser，拍照可能顯示一般上傳選擇器。</span>${url ? `<a href="${esc(url)}">改用 LINE LIFF 開啟</a>` : ""}</aside>`;
-}
-function refreshNativeBusinessCardCameraInput(inputId) {
-  const current = document.getElementById(inputId);
-  if (!current || current.type !== "file") return null;
-  const fresh = current.cloneNode(true);
-  fresh.value = "";
-  fresh.setAttribute("accept", "image/*");
-  fresh.setAttribute("capture", "environment");
-  fresh.hidden = true;
-  current.replaceWith(fresh);
-  return fresh;
-}
-function refreshBusinessCardCameraInputs(scope) {
-  const inputIds = scope === "mycard"
-    ? ["personalCardCamera", "personalCardBack"]
-    : scope === "collected"
-      ? ["cardCamera", "cardBack"]
-      : ["personalCardCamera", "personalCardBack", "cardCamera", "cardBack"];
-  inputIds.forEach(refreshNativeBusinessCardCameraInput);
 }
 
 const inviteFromLocation = () => {
@@ -2043,31 +2022,6 @@ async function cropCollectionScanImage(file, sideLabel = "正面") {
     $("#confirmCardCropper").onclick=async()=>{const button=$("#confirmCardCropper");try{button.disabled=true;button.textContent="裁切中…";const canvas=cardCropper.getCroppedCanvas({maxWidth:2000,maxHeight:2000,imageSmoothingEnabled:true,imageSmoothingQuality:"high"});const blob=await new Promise((done)=>canvas.toBlob(done,"image/webp",.9));if(!blob)throw new Error("名片裁切失敗");finish(new File([blob],`business-card-${sideLabel === "背面" ? "back" : "front"}.webp`,{type:"image/webp"}));}catch(error){alert(error.message||"名片裁切失敗");}finally{if(button.isConnected){button.disabled=false;button.textContent="確認裁切";}}};
   });
 }
-async function uploadCardImageOriginal(file, sideLabel, purpose) {
-  if (file.size > 15 * 1024 * 1024) throw new Error("名片原圖不可超過 15MB");
-  const response=await fetch("/v1/card-images",{method:"POST",headers:{authorization:"Bearer " + state.token,"content-type":file.type,"x-card-file-size":String(file.size),"x-card-side":sideLabel === "背面" ? "back" : "front","x-card-purpose":purpose},body:file});
-  const body=await response.json();if(!response.ok)throw new Error(body.error||"名片原圖上傳失敗");return body.job;
-}
-
-async function saveCardImageProcessingResult(jobId, file, metadata, status = "completed") {
-  const form=new FormData();form.append("image",file);form.append("metadata",JSON.stringify(metadata));form.append("status",status);
-  const response=await fetch("/v1/card-images/" + encodeURIComponent(jobId) + "/result",{method:"POST",headers:{authorization:"Bearer " + state.token},body:form});
-  const body=await response.json();if(!response.ok)throw new Error(body.error||"名片影像處理結果儲存失敗");return body.job;
-}
-
-async function prepareBusinessCardImage(file, sideLabel, purpose) {
-  const job=await uploadCardImageOriginal(file,sideLabel,purpose);
-  let result=await processBusinessCardImage(file);let processed=result.file;let metadata=result.metadata || {};
-  const confidence=Number(metadata.detection?.confidence||0),quality=Number(metadata.quality?.overall||0);
-  const needsReview=!processed||confidence<CARD_IMAGE_THRESHOLDS.confidence||quality<CARD_IMAGE_THRESHOLDS.quality;
-  if(needsReview){
-    processed=file;
-    metadata={...metadata,processing:{...(metadata.processing||{}),perspectiveCorrected:false,cropped:false,manualCorrection:false},warning:"自動裁切信心不足，已保留完整原圖進行辨識；如結果不理想，可在名片結果頁手動裁切並重新辨識"};
-  }
-  processed=await compressCardImage(processed);
-  await saveCardImageProcessingResult(job.id,processed,metadata,needsReview?"needs_review":"completed");
-  return {file:processed,jobId:job.id,metadata};
-}
 async function prepareCardLiff() {
   await initLiffOnce();
   if (!liff.isLoggedIn()) {
@@ -2395,7 +2349,6 @@ async function card() {
     collectionScanFiles = [];
     layout(`<section class="card card-empty personal-card-create"><h2>建立我的名片</h2><p class="muted">可以使用 LINE 會員資料快速建立，也可以拍照或上傳自己的實體名片，由 AI 辨識後帶入電子名片。</p><button class="btn" id="createMyCard">使用 LINE 資料建立名片</button><div class="personal-card-create-divider"><span>或掃描自己的名片</span></div><div class="card-scan-actions"><label>📷 拍照掃描<input id="personalCardCamera" type="file" accept="image/*" capture="environment" hidden></label><label>▧ 相簿上傳<input id="personalCardGallery" type="file" accept="image/*" multiple hidden></label></div>${cameraEntryNotice()}<div id="personalCardScanDraft" class="scan-draft hidden"><strong id="personalCardScanDraftCount"></strong><label class="mini-btn">＋ 加入背面<input id="personalCardBack" type="file" accept="image/*" capture="environment" hidden></label><button class="btn" id="startPersonalCardOcr">辨識並建立</button></div><p class="muted personal-card-create-note">掃描結果會先讓你校正；正面圖片會成為標準版電子名片封面。此流程不會加入名片收藏，也不會產生收藏贈點。</p></section>`);
     $("#createMyCard").onclick = async () => { const button=$("#createMyCard"); try { await withActionFeedback(button,()=>api("/v1/cards/me", { method:"PUT", body:JSON.stringify(lineGeneratedCardExample()) }),{busy:"建立中…",success:"已建立"}); state.cardView = "contact"; await card(); } catch (error) { alert(error.message); } };
-    refreshBusinessCardCameraInputs("mycard");
     bindPersonalCardScanInputs();
     return;
   }
@@ -2451,41 +2404,42 @@ function bindPersonalCardScanInputs() {
   const select = async (files) => {
     try {
       const selected = Array.from(files || []).slice(0, 2);
-      const cropped = []; const jobs = [];
-      const draft=$("#personalCardScanDraft"); const count=$("#personalCardScanDraftCount");
-      draft.classList.remove("hidden");
+      const cropped = [];
       for (let index = 0; index < selected.length; index += 1) {
-        count.textContent="正在智慧校正第 " + (index + 1) + " 張…";
-        const image = await prepareBusinessCardImage(selected[index], index ? "背面" : "正面", "personal");
+        const image = await cropCollectionScanImage(selected[index], index ? "背面" : "正面");
         if (!image) return;
-        cropped.push(image.file); jobs.push(image.jobId);
+        cropped.push(await compressCardImage(image));
       }
-      collectionScanFiles = cropped; collectionScanJobs = jobs;
+      collectionScanFiles = cropped;
       if (!collectionScanFiles.length) return;
-      count.textContent = "已智慧校正 " + collectionScanFiles.length + " 張（正面" + (collectionScanFiles.length > 1 ? "＋背面" : "") + "）";
+      $("#personalCardScanDraft").classList.remove("hidden");
+      $("#personalCardScanDraftCount").textContent = `已裁切 ${collectionScanFiles.length} 張（正面${collectionScanFiles.length > 1 ? "＋背面" : ""}）`;
     } catch (error) { alert(error.message || "名片圖片處理失敗"); }
   };
   $("#personalCardCamera").onchange = (event) => select(event.target.files);
   $("#personalCardGallery").onchange = (event) => select(event.target.files);
   $("#personalCardBack").onchange = async (event) => {
     try {
-      const file = event.target.files?.[0]; if (!file) return;
-      $("#personalCardScanDraftCount").textContent="正在智慧校正背面…";
-      const cropped = await prepareBusinessCardImage(file, "背面", "personal"); if (!cropped) return;
-      collectionScanFiles[1] = cropped.file; collectionScanJobs[1] = cropped.jobId;
-      $("#personalCardScanDraftCount").textContent = "已智慧校正 2 張（正面＋背面）";
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const cropped = await cropCollectionScanImage(file, "背面");
+      if (!cropped) return;
+      collectionScanFiles[1] = await compressCardImage(cropped);
+      $("#personalCardScanDraftCount").textContent = "已裁切 2 張（正面＋背面）";
     } catch (error) { alert(error.message || "名片背面處理失敗"); }
   };
   $("#startPersonalCardOcr").onclick = async () => {
     const button = $("#startPersonalCardOcr");
     try {
       await withActionFeedback(button, async () => {
-        const form = new FormData(); form.append("frontJobId", collectionScanJobs[0]);
-        if (collectionScanJobs[1]) form.append("backJobId", collectionScanJobs[1]);
-        const upload = await fetch("/v1/cards/me/imports", { method:"POST", headers:{ authorization:"Bearer " + state.token }, body:form });
-        const uploaded = await upload.json(); if (!upload.ok) throw new Error(uploaded.error || "名片上傳失敗");
-        const recognized = await api("/v1/card-collection/imports/" + encodeURIComponent(uploaded.import.id) + "/recognize", { method:"POST", body:"{}" });
-        collectionScanFiles = []; collectionScanJobs = [];
+        const form = new FormData();
+        form.append("front", collectionScanFiles[0]);
+        if (collectionScanFiles[1]) form.append("back", collectionScanFiles[1]);
+        const upload = await fetch("/v1/cards/me/imports", { method:"POST", headers:{ authorization:`Bearer ${state.token}` }, body:form });
+        const uploaded = await upload.json();
+        if (!upload.ok) throw new Error(uploaded.error || "名片上傳失敗");
+        const recognized = await api(`/v1/card-collection/imports/${encodeURIComponent(uploaded.import.id)}/recognize`, { method:"POST", body:"{}" });
+        collectionScanFiles = [];
         showPersonalCardReview(recognized.eventId, recognized.card, recognized.confidence);
       }, { busy:"AI 辨識中…", success:"辨識完成" });
     } catch (error) { alert(error.message || "名片辨識失敗"); }
@@ -2512,7 +2466,6 @@ function showPersonalCardReview(eventId, cardData, confidence) {
 
 let collectionCards = [];
 let collectionScanFiles = [];
-let collectionScanJobs = [];
 let collectionIndustryOptions = [];
 let collectionRankingEnabled = false;
 let collectionRefreshTimer = null;
@@ -2588,34 +2541,6 @@ async function authorizedImageUrl(card) {
   if (!card.hasImage) return "";
   try { const response=await fetch(`/v1/card-collection/${encodeURIComponent(card.id)}/image`,{headers:{authorization:`Bearer ${state.token}`}}); if(!response.ok)return ""; return URL.createObjectURL(await response.blob()); } catch { return ""; }
 }
-async function manualCropContactCard(card, button) {
-  const label=button?.textContent || "手動裁切";
-  try {
-    if(button){button.disabled=true;button.textContent="載入原始照片…";}
-    const source=await fetch(`/v1/card-collection/${encodeURIComponent(card.id)}/original-image?v=${Date.now()}`,{headers:{authorization:`Bearer ${state.token}`},cache:"no-store"});
-    if(!source.ok){const body=await source.json().catch(()=>({}));throw new Error(body.error || "找不到可供裁切的原始名片照片");}
-    const blob=await source.blob();
-    const original=new File([blob],"business-card-original."+(blob.type.includes("png")?"png":blob.type.includes("webp")?"webp":"jpg"),{type:blob.type || "image/jpeg"});
-    if(button){button.disabled=false;button.textContent=label;}
-    const cropped=await cropCollectionScanImage(original,"正面");
-    if(!cropped)return;
-    if(button){button.disabled=true;button.textContent="儲存裁切中…";}
-    const compressed=await compressCardImage(cropped);
-    const form=new FormData();form.append("image",compressed,"business-card-manual.webp");
-    const response=await fetch(`/v1/card-collection/${encodeURIComponent(card.id)}/manual-crop`,{method:"POST",headers:{authorization:`Bearer ${state.token}`},body:form});
-    const body=await response.json().catch(()=>({}));
-    if(!response.ok)throw new Error(body.error || "手動裁切儲存失敗");
-    card.aiCrm={...(card.aiCrm || {}),status:"processing",error:""};
-    card.aiInsights={...(card.aiInsights || {}),status:"processing",error:""};
-    alert("手動裁切已套用，系統正在重新辨識名片");
-    await showContactEditor(card);
-  } catch(error) {
-    const message=String(error?.message || "手動裁切失敗");
-    alert(message.includes("D1_ERROR") || message.includes("SQLITE_CONSTRAINT") ? "名片處理狀態異常，請重新開啟頁面後再試" : message);
-  } finally {
-    if(button?.isConnected){button.disabled=false;button.textContent=label;}
-  }
-}
 async function attachCollectionImages() {
   await Promise.all(collectionCards.map(async(card)=>{const image=$(`[data-contact-image="${CSS.escape(card.id)}"]`);if(!image)return;const src=await authorizedImageUrl(card);if(src)image.src=src;}));
 }
@@ -2623,27 +2548,24 @@ async function attachCollectionImages() {
 function bindScanInputs() {
   const select = async (files) => {
     try {
-      const selected=Array.from(files || []).slice(0,2); const cropped=[]; const jobs=[];
+      const selected=Array.from(files || []).slice(0,2); const cropped=[];
+      for(let index=0;index<selected.length;index+=1){const image=await cropCollectionScanImage(selected[index],index ? "背面" : "正面");if(!image)return;cropped.push(await compressCardImage(image));}
+      collectionScanFiles = cropped;
+      if (!collectionScanFiles.length) return;
       $("#scanDraft").classList.remove("hidden");
-      for(let index=0;index<selected.length;index+=1){
-        $("#scanDraftCount").textContent="正在智慧校正第 " + (index + 1) + " 張…";
-        const image=await prepareBusinessCardImage(selected[index],index ? "背面" : "正面","collection");if(!image)return;
-        cropped.push(image.file);jobs.push(image.jobId);
-      }
-      collectionScanFiles=cropped;collectionScanJobs=jobs;if(!collectionScanFiles.length)return;
-      $("#scanDraftCount").textContent="已智慧校正 " + collectionScanFiles.length + " 張（正面" + (collectionScanFiles.length > 1 ? "＋背面" : "") + "）";
+      $("#scanDraftCount").textContent = `已裁切 ${collectionScanFiles.length} 張（正面${collectionScanFiles.length > 1 ? "＋背面" : ""}）`;
     } catch(error) { alert(error.message); }
   };
-  $("#cardCamera").onchange=(event)=>select(event.target.files);
-  $("#cardGallery").onchange=(event)=>select(event.target.files);
-  $("#cardBack").onchange=async(event)=>{try{const file=event.target.files?.[0];if(file){$("#scanDraftCount").textContent="正在智慧校正背面…";const cropped=await prepareBusinessCardImage(file,"背面","collection");if(!cropped)return;collectionScanFiles[1]=cropped.file;collectionScanJobs[1]=cropped.jobId;$("#scanDraftCount").textContent="已智慧校正 2 張（正面＋背面）";}}catch(error){alert(error.message)}};
-  $("#startCardOcr").onclick=async()=>{
+  $("#cardCamera").onchange = (event)=>select(event.target.files);
+  $("#cardGallery").onchange = (event)=>select(event.target.files);
+  $("#cardBack").onchange = async(event)=>{try{const file=event.target.files?.[0];if(file){const cropped=await cropCollectionScanImage(file,"背面");if(!cropped)return;collectionScanFiles[1]=await compressCardImage(cropped);$("#scanDraftCount").textContent="已裁切 2 張（正面＋背面）";}}catch(error){alert(error.message)}};
+  $("#startCardOcr").onclick = async()=>{
     const button=$("#startCardOcr");
     try { await withActionFeedback(button,async()=>{
-      const form=new FormData();form.append("frontJobId",collectionScanJobs[0]);if(collectionScanJobs[1])form.append("backJobId",collectionScanJobs[1]);
-      const upload=await fetch("/v1/card-collection/imports",{method:"POST",headers:{authorization:"Bearer " + state.token},body:form});const uploaded=await upload.json();if(!upload.ok)throw new Error(uploaded.error||"名片上傳失敗");
-      const submitted=await api("/v1/card-collection/imports/" + encodeURIComponent(uploaded.import.id) + "/submit",{method:"POST",body:"{}"});
-      collectionScanFiles=[];collectionScanJobs=[];await cardCollection();
+      const form=new FormData();form.append("front",collectionScanFiles[0]);if(collectionScanFiles[1])form.append("back",collectionScanFiles[1]);
+      const upload=await fetch("/v1/card-collection/imports",{method:"POST",headers:{authorization:`Bearer ${state.token}`},body:form});const uploaded=await upload.json();if(!upload.ok)throw new Error(uploaded.error||"名片上傳失敗");
+      const submitted=await api(`/v1/card-collection/imports/${encodeURIComponent(uploaded.import.id)}/submit`,{method:"POST",body:"{}"});
+      collectionScanFiles=[]; await cardCollection();
       if(submitted.reward?.status==="pending_validation")alert("名片辨識完成並確認不是重複收藏後，將自動贈送 10 K點。");
     },{busy:"送出中…",success:"已送出，AI 分析中"}); } catch(error){alert(error.message);}
   };
@@ -2666,16 +2588,16 @@ function aiCardCrmSection(card) {
   if(card.sourceType !== "private_import")return "";
   const crm=card.aiCrm || {};
   const status=crm.status || "";
-  if(status==="queued" || status==="processing")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>正在二次辨識名片，並用姓名、公司、電話、地址、Email 與政府公開資料交叉查證。</p><button class="btn alt" type="button" data-manual-crop>手動調整裁切</button></section>`;
-  if(status==="failed")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>公司資料補全暫時失敗：${esc(crm.error || "系統將自動重試")}。</p><button class="btn alt" type="button" data-manual-crop>手動裁切並重新辨識</button></section>`;
-  if(status!=="ready")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>這張舊名片尚未完成公司與社群資料補全。</p><button class="btn alt" type="button" data-manual-crop>手動裁切並開始辨識</button></section>`;
+  if(status==="queued" || status==="processing")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>正在二次辨識名片，並用姓名、公司、電話、地址、Email 與政府公開資料交叉查證。</p><button class="btn alt" type="button" data-retry-ai-crm>立即重新辨識與補全</button></section>`;
+  if(status==="failed")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>公司資料補全暫時失敗：${esc(crm.error || "系統將自動重試")}。</p><button class="btn alt" type="button" data-retry-ai-crm>重新辨識與補全</button></section>`;
+  if(status!=="ready")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>這張舊名片尚未完成公司與社群資料補全。</p><button class="btn alt" type="button" data-retry-ai-crm>開始辨識與補全</button></section>`;
   const company=crm.company || {};
   const items=[["官網",company.website,true],["Google Map",company.googleMap,true],["Facebook",company.facebook,true],["Instagram",company.instagram,true],["YouTube",company.youtube,true],["LinkedIn",company.linkedin,true],["地址",company.address,false],["電話",company.phone,false],["Email",company.email,false],["統編",company.taxId,false]].filter(([,value])=>value);
   const info=items.map(([label,value,link])=>`<div><small>${label}</small>${link?`<a href="${esc(value)}" target="_blank" rel="noopener noreferrer">開啟連結 ↗</a>`:`<strong>${esc(value)}</strong>`}</div>`).join("");
   const news=(crm.news || []).map((item)=>`<li>${item.url?`<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>`:`<strong>${esc(item.title)}</strong>`}<p>${esc(item.summary || "")}</p></li>`).join("");
   const awards=(crm.awards || []).map((item)=>`<li>${item.url?`<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>`:`<strong>${esc(item.title)}</strong>`}${item.year?`<span>${esc(item.year)}</span>`:""}</li>`).join("");
   const knowledge=crm.knowledgeCard || {};
-  return `<section class="ai-card-crm-result"><div class="ai-card-crm-result-title">${company.logoUrl?`<img src="${esc(company.logoUrl)}" alt="公司 Logo" loading="lazy" referrerpolicy="no-referrer">`:""}<div><small>AI 智慧名片 CRM</small><h3>${esc(card.companyName || card.displayName || "公司知識卡")}</h3></div><button class="mini-btn" type="button" data-manual-crop>手動裁切並重新辨識</button></div>${company.description?`<p class="ai-card-crm-company-description">${esc(company.description)}</p>`:""}${info?`<div class="ai-card-crm-info">${info}</div>`:""}<div class="ai-card-crm-knowledge"><h4>公司知識卡</h4><p>${esc(knowledge.summary || "尚無公司摘要")}</p>${knowledge.services?.length?`<div>${knowledge.services.map((item)=>`<span>${esc(item)}</span>`).join("")}</div>`:""}${knowledge.contactAngles?.length?`<ul>${knowledge.contactAngles.map((item)=>`<li>${esc(item)}</li>`).join("")}</ul>`:""}</div>${news?`<details><summary>新聞紀錄（${crm.news.length}）</summary><ul class="ai-card-crm-links">${news}</ul></details>`:""}${awards?`<details><summary>得獎紀錄（${crm.awards.length}）</summary><ul class="ai-card-crm-links">${awards}</ul></details>`:""}<article class="ai-card-crm-task"><small>第一個任務${crm.firstTask?.eventId?"・已加入個人行程":""}</small><h4>${esc(crm.firstTask?.title || "首次跟進")}</h4><p>${esc(crm.firstTask?.description || "")}</p></article></section>`;
+  return `<section class="ai-card-crm-result"><div class="ai-card-crm-result-title">${company.logoUrl?`<img src="${esc(company.logoUrl)}" alt="公司 Logo" loading="lazy" referrerpolicy="no-referrer">`:""}<div><small>AI 智慧名片 CRM</small><h3>${esc(card.companyName || card.displayName || "公司知識卡")}</h3></div><button class="mini-btn" type="button" data-retry-ai-crm>重新辨識與補全</button></div>${company.description?`<p class="ai-card-crm-company-description">${esc(company.description)}</p>`:""}${info?`<div class="ai-card-crm-info">${info}</div>`:""}<div class="ai-card-crm-knowledge"><h4>公司知識卡</h4><p>${esc(knowledge.summary || "尚無公司摘要")}</p>${knowledge.services?.length?`<div>${knowledge.services.map((item)=>`<span>${esc(item)}</span>`).join("")}</div>`:""}${knowledge.contactAngles?.length?`<ul>${knowledge.contactAngles.map((item)=>`<li>${esc(item)}</li>`).join("")}</ul>`:""}</div>${news?`<details><summary>新聞紀錄（${crm.news.length}）</summary><ul class="ai-card-crm-links">${news}</ul></details>`:""}${awards?`<details><summary>得獎紀錄（${crm.awards.length}）</summary><ul class="ai-card-crm-links">${awards}</ul></details>`:""}<article class="ai-card-crm-task"><small>第一個任務${crm.firstTask?.eventId?"・已加入個人行程":""}</small><h4>${esc(crm.firstTask?.title || "首次跟進")}</h4><p>${esc(crm.firstTask?.description || "")}</p></article></section>`;
 }
 function crmInsightSection(card) {
   const insight=card.aiInsights || {};
@@ -2717,7 +2639,13 @@ async function showContactEditor(card) {
   layout(`<section class="business-card collection-editor"><div class="business-card-title"><button class="back-card" id="backCollection" aria-label="返回">←</button><h2>名片詳細資料</h2></div>${tabs}${panel}</section>`);
   $("#backCollection").onclick=()=>{ state.collectionCardView=""; state.collectionCardVersion=""; cardCollection(); };
   document.querySelectorAll("[data-collection-card-tab]").forEach((button) => button.onclick = () => { state.collectionCardView=button.dataset.collectionCardTab; showContactEditor(card); });
-  $("[data-manual-crop]")?.addEventListener("click", (event) => manualCropContactCard(card,event.currentTarget));
+  $("[data-retry-ai-crm]")?.addEventListener("click", async (event) => {
+    try {
+      await withActionFeedback(event.currentTarget, () => api(`/v1/card-collection/${encodeURIComponent(card.id)}/recalculate-ai-crm`, { method:"POST", body:"{}" }), { busy:"查證排程中…", success:"已開始重新辨識與查證" });
+      card.aiCrm = { ...(card.aiCrm || {}), status:"queued", error:"" };
+      showContactEditor(card);
+    } catch (error) { alert(error.message); }
+  });
   $("[data-retry-insights]")?.addEventListener("click", async (event) => {
     try {
       await withActionFeedback(event.currentTarget, () => api(`/v1/card-collection/${encodeURIComponent(card.id)}/recalculate-insights`, { method:"POST", body:"{}" }), { busy:"分析排程中…", success:"已開始分析" });
@@ -2826,7 +2754,6 @@ async function cardCollection(search = "", industry = "", quiet = false) {
   if(collectionRefreshTimer){clearTimeout(collectionRefreshTimer);collectionRefreshTimer=null;}
   if(!quiet){
     layout(`<section class="card card-scan-panel"><h2>▣ 掃描建立名片</h2><p class="muted">選擇照片後先裁切名片範圍，再上傳做 OCR 分析並建立 CRM 檔案；每張新名片贈 10 K點，相同名片不得重複上傳或領點。</p><div class="card-scan-actions"><label>📷 拍照掃描<input id="cardCamera" type="file" accept="image/*" capture="environment" hidden></label><label>▧ 相簿上傳<input id="cardGallery" type="file" accept="image/*" multiple hidden></label></div>${cameraEntryNotice()}<div id="scanDraft" class="scan-draft hidden"><strong id="scanDraftCount"></strong><label class="mini-btn">＋ 加入背面<input id="cardBack" type="file" accept="image/*" capture="environment" hidden></label><button class="btn" id="startCardOcr">送出名片</button></div></section>${cardCrmIntro}<section class="collection-search"><input id="collectionSearch" value="${esc(search)}" placeholder="搜尋姓名、公司、電話或 Email…"><button class="mini-btn" id="runCollectionSearch">搜尋</button></section><nav id="collectionIndustryFilters" class="collection-industry-filters" aria-label="行業分類篩選"></nav><section class="card collection-list"><div class="collection-list-head"><h2>我的收藏名單</h2><div class="collection-list-tools"><button type="button" id="toggleCollectionRanking" class="${collectionRankingEnabled?"active":""}">配對排名</button><span id="collectionCount">載入中…</span></div></div><p class="muted collection-system-note">名片先完成 OCR 並寫入收藏；AI 五大標籤會在後台接續補齊，不影響收藏與贈點。</p><div id="collectionRows"><p class="muted">正在載入收藏名片…</p></div></section>`);
-    refreshBusinessCardCameraInputs("collected");
     bindScanInputs();
   }
   try {

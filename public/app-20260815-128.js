@@ -1,4 +1,4 @@
-import { CARD_IMAGE_THRESHOLDS, processBusinessCardImage } from "/card-image-smart-20260815-5.js";
+import { CARD_IMAGE_THRESHOLDS, processBusinessCardImage } from "/card-image-smart-20260815-3.js";
 
 const OFFICIAL_PAGES = {
   home: "https://www.k-link.com.tw/",
@@ -2049,8 +2049,8 @@ async function uploadCardImageOriginal(file, sideLabel, purpose) {
   const body=await response.json();if(!response.ok)throw new Error(body.error||"名片原圖上傳失敗");return body.job;
 }
 
-async function saveCardImageProcessingResult(jobId, file, metadata, status = "completed") {
-  const form=new FormData();form.append("image",file);form.append("metadata",JSON.stringify(metadata));form.append("status",status);
+async function saveCardImageProcessingResult(jobId, file, metadata) {
+  const form=new FormData();form.append("image",file);form.append("metadata",JSON.stringify(metadata));form.append("status","completed");
   const response=await fetch("/v1/card-images/" + encodeURIComponent(jobId) + "/result",{method:"POST",headers:{authorization:"Bearer " + state.token},body:form});
   const body=await response.json();if(!response.ok)throw new Error(body.error||"名片影像處理結果儲存失敗");return body.job;
 }
@@ -2059,13 +2059,12 @@ async function prepareBusinessCardImage(file, sideLabel, purpose) {
   const job=await uploadCardImageOriginal(file,sideLabel,purpose);
   let result=await processBusinessCardImage(file);let processed=result.file;let metadata=result.metadata || {};
   const confidence=Number(metadata.detection?.confidence||0),quality=Number(metadata.quality?.overall||0);
-  const needsReview=!processed||confidence<CARD_IMAGE_THRESHOLDS.confidence||quality<CARD_IMAGE_THRESHOLDS.quality;
-  if(needsReview){
-    processed=file;
-    metadata={...metadata,processing:{...(metadata.processing||{}),perspectiveCorrected:false,cropped:false,manualCorrection:false},warning:"自動裁切信心不足，已保留完整原圖進行辨識；如結果不理想，可在名片結果頁手動裁切並重新辨識"};
+  if(!processed||confidence<CARD_IMAGE_THRESHOLDS.confidence||quality<CARD_IMAGE_THRESHOLDS.quality){
+    processed=await cropCollectionScanImage(file,sideLabel);if(!processed)return null;
+    metadata={...metadata,processing:{...(metadata.processing||{}),perspectiveCorrected:false,cropped:true,manualCorrection:true},warning:"自動偵測信心不足，已由使用者手動校正"};
   }
   processed=await compressCardImage(processed);
-  await saveCardImageProcessingResult(job.id,processed,metadata,needsReview?"needs_review":"completed");
+  await saveCardImageProcessingResult(job.id,processed,metadata);
   return {file:processed,jobId:job.id,metadata};
 }
 async function prepareCardLiff() {
@@ -2588,34 +2587,6 @@ async function authorizedImageUrl(card) {
   if (!card.hasImage) return "";
   try { const response=await fetch(`/v1/card-collection/${encodeURIComponent(card.id)}/image`,{headers:{authorization:`Bearer ${state.token}`}}); if(!response.ok)return ""; return URL.createObjectURL(await response.blob()); } catch { return ""; }
 }
-async function manualCropContactCard(card, button) {
-  const label=button?.textContent || "手動裁切";
-  try {
-    if(button){button.disabled=true;button.textContent="載入原始照片…";}
-    const source=await fetch(`/v1/card-collection/${encodeURIComponent(card.id)}/original-image?v=${Date.now()}`,{headers:{authorization:`Bearer ${state.token}`},cache:"no-store"});
-    if(!source.ok){const body=await source.json().catch(()=>({}));throw new Error(body.error || "找不到可供裁切的原始名片照片");}
-    const blob=await source.blob();
-    const original=new File([blob],"business-card-original."+(blob.type.includes("png")?"png":blob.type.includes("webp")?"webp":"jpg"),{type:blob.type || "image/jpeg"});
-    if(button){button.disabled=false;button.textContent=label;}
-    const cropped=await cropCollectionScanImage(original,"正面");
-    if(!cropped)return;
-    if(button){button.disabled=true;button.textContent="儲存裁切中…";}
-    const compressed=await compressCardImage(cropped);
-    const form=new FormData();form.append("image",compressed,"business-card-manual.webp");
-    const response=await fetch(`/v1/card-collection/${encodeURIComponent(card.id)}/manual-crop`,{method:"POST",headers:{authorization:`Bearer ${state.token}`},body:form});
-    const body=await response.json().catch(()=>({}));
-    if(!response.ok)throw new Error(body.error || "手動裁切儲存失敗");
-    card.aiCrm={...(card.aiCrm || {}),status:"processing",error:""};
-    card.aiInsights={...(card.aiInsights || {}),status:"processing",error:""};
-    alert("手動裁切已套用，系統正在重新辨識名片");
-    await showContactEditor(card);
-  } catch(error) {
-    const message=String(error?.message || "手動裁切失敗");
-    alert(message.includes("D1_ERROR") || message.includes("SQLITE_CONSTRAINT") ? "名片處理狀態異常，請重新開啟頁面後再試" : message);
-  } finally {
-    if(button?.isConnected){button.disabled=false;button.textContent=label;}
-  }
-}
 async function attachCollectionImages() {
   await Promise.all(collectionCards.map(async(card)=>{const image=$(`[data-contact-image="${CSS.escape(card.id)}"]`);if(!image)return;const src=await authorizedImageUrl(card);if(src)image.src=src;}));
 }
@@ -2666,16 +2637,16 @@ function aiCardCrmSection(card) {
   if(card.sourceType !== "private_import")return "";
   const crm=card.aiCrm || {};
   const status=crm.status || "";
-  if(status==="queued" || status==="processing")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>正在二次辨識名片，並用姓名、公司、電話、地址、Email 與政府公開資料交叉查證。</p><button class="btn alt" type="button" data-manual-crop>手動調整裁切</button></section>`;
-  if(status==="failed")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>公司資料補全暫時失敗：${esc(crm.error || "系統將自動重試")}。</p><button class="btn alt" type="button" data-manual-crop>手動裁切並重新辨識</button></section>`;
-  if(status!=="ready")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>這張舊名片尚未完成公司與社群資料補全。</p><button class="btn alt" type="button" data-manual-crop>手動裁切並開始辨識</button></section>`;
+  if(status==="queued" || status==="processing")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>正在二次辨識名片，並用姓名、公司、電話、地址、Email 與政府公開資料交叉查證。</p><button class="btn alt" type="button" data-retry-ai-crm>立即重新辨識與補全</button></section>`;
+  if(status==="failed")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>公司資料補全暫時失敗：${esc(crm.error || "系統將自動重試")}。</p><button class="btn alt" type="button" data-retry-ai-crm>重新辨識與補全</button></section>`;
+  if(status!=="ready")return `<section class="ai-card-crm-result pending"><h3>AI 智慧名片 CRM</h3><p>這張舊名片尚未完成公司與社群資料補全。</p><button class="btn alt" type="button" data-retry-ai-crm>開始辨識與補全</button></section>`;
   const company=crm.company || {};
   const items=[["官網",company.website,true],["Google Map",company.googleMap,true],["Facebook",company.facebook,true],["Instagram",company.instagram,true],["YouTube",company.youtube,true],["LinkedIn",company.linkedin,true],["地址",company.address,false],["電話",company.phone,false],["Email",company.email,false],["統編",company.taxId,false]].filter(([,value])=>value);
   const info=items.map(([label,value,link])=>`<div><small>${label}</small>${link?`<a href="${esc(value)}" target="_blank" rel="noopener noreferrer">開啟連結 ↗</a>`:`<strong>${esc(value)}</strong>`}</div>`).join("");
   const news=(crm.news || []).map((item)=>`<li>${item.url?`<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>`:`<strong>${esc(item.title)}</strong>`}<p>${esc(item.summary || "")}</p></li>`).join("");
   const awards=(crm.awards || []).map((item)=>`<li>${item.url?`<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>`:`<strong>${esc(item.title)}</strong>`}${item.year?`<span>${esc(item.year)}</span>`:""}</li>`).join("");
   const knowledge=crm.knowledgeCard || {};
-  return `<section class="ai-card-crm-result"><div class="ai-card-crm-result-title">${company.logoUrl?`<img src="${esc(company.logoUrl)}" alt="公司 Logo" loading="lazy" referrerpolicy="no-referrer">`:""}<div><small>AI 智慧名片 CRM</small><h3>${esc(card.companyName || card.displayName || "公司知識卡")}</h3></div><button class="mini-btn" type="button" data-manual-crop>手動裁切並重新辨識</button></div>${company.description?`<p class="ai-card-crm-company-description">${esc(company.description)}</p>`:""}${info?`<div class="ai-card-crm-info">${info}</div>`:""}<div class="ai-card-crm-knowledge"><h4>公司知識卡</h4><p>${esc(knowledge.summary || "尚無公司摘要")}</p>${knowledge.services?.length?`<div>${knowledge.services.map((item)=>`<span>${esc(item)}</span>`).join("")}</div>`:""}${knowledge.contactAngles?.length?`<ul>${knowledge.contactAngles.map((item)=>`<li>${esc(item)}</li>`).join("")}</ul>`:""}</div>${news?`<details><summary>新聞紀錄（${crm.news.length}）</summary><ul class="ai-card-crm-links">${news}</ul></details>`:""}${awards?`<details><summary>得獎紀錄（${crm.awards.length}）</summary><ul class="ai-card-crm-links">${awards}</ul></details>`:""}<article class="ai-card-crm-task"><small>第一個任務${crm.firstTask?.eventId?"・已加入個人行程":""}</small><h4>${esc(crm.firstTask?.title || "首次跟進")}</h4><p>${esc(crm.firstTask?.description || "")}</p></article></section>`;
+  return `<section class="ai-card-crm-result"><div class="ai-card-crm-result-title">${company.logoUrl?`<img src="${esc(company.logoUrl)}" alt="公司 Logo" loading="lazy" referrerpolicy="no-referrer">`:""}<div><small>AI 智慧名片 CRM</small><h3>${esc(card.companyName || card.displayName || "公司知識卡")}</h3></div><button class="mini-btn" type="button" data-retry-ai-crm>重新辨識與補全</button></div>${company.description?`<p class="ai-card-crm-company-description">${esc(company.description)}</p>`:""}${info?`<div class="ai-card-crm-info">${info}</div>`:""}<div class="ai-card-crm-knowledge"><h4>公司知識卡</h4><p>${esc(knowledge.summary || "尚無公司摘要")}</p>${knowledge.services?.length?`<div>${knowledge.services.map((item)=>`<span>${esc(item)}</span>`).join("")}</div>`:""}${knowledge.contactAngles?.length?`<ul>${knowledge.contactAngles.map((item)=>`<li>${esc(item)}</li>`).join("")}</ul>`:""}</div>${news?`<details><summary>新聞紀錄（${crm.news.length}）</summary><ul class="ai-card-crm-links">${news}</ul></details>`:""}${awards?`<details><summary>得獎紀錄（${crm.awards.length}）</summary><ul class="ai-card-crm-links">${awards}</ul></details>`:""}<article class="ai-card-crm-task"><small>第一個任務${crm.firstTask?.eventId?"・已加入個人行程":""}</small><h4>${esc(crm.firstTask?.title || "首次跟進")}</h4><p>${esc(crm.firstTask?.description || "")}</p></article></section>`;
 }
 function crmInsightSection(card) {
   const insight=card.aiInsights || {};
@@ -2717,7 +2688,13 @@ async function showContactEditor(card) {
   layout(`<section class="business-card collection-editor"><div class="business-card-title"><button class="back-card" id="backCollection" aria-label="返回">←</button><h2>名片詳細資料</h2></div>${tabs}${panel}</section>`);
   $("#backCollection").onclick=()=>{ state.collectionCardView=""; state.collectionCardVersion=""; cardCollection(); };
   document.querySelectorAll("[data-collection-card-tab]").forEach((button) => button.onclick = () => { state.collectionCardView=button.dataset.collectionCardTab; showContactEditor(card); });
-  $("[data-manual-crop]")?.addEventListener("click", (event) => manualCropContactCard(card,event.currentTarget));
+  $("[data-retry-ai-crm]")?.addEventListener("click", async (event) => {
+    try {
+      await withActionFeedback(event.currentTarget, () => api(`/v1/card-collection/${encodeURIComponent(card.id)}/recalculate-ai-crm`, { method:"POST", body:"{}" }), { busy:"查證排程中…", success:"已開始重新辨識與查證" });
+      card.aiCrm = { ...(card.aiCrm || {}), status:"queued", error:"" };
+      showContactEditor(card);
+    } catch (error) { alert(error.message); }
+  });
   $("[data-retry-insights]")?.addEventListener("click", async (event) => {
     try {
       await withActionFeedback(event.currentTarget, () => api(`/v1/card-collection/${encodeURIComponent(card.id)}/recalculate-insights`, { method:"POST", body:"{}" }), { busy:"分析排程中…", success:"已開始分析" });

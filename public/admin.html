@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>A-KAFFIT TEAM｜營運管理中心</title>
-    <link rel="stylesheet" href="/admin.css?v=20260731-12" />
+    <link rel="stylesheet" href="/admin.css?v=20260813-1" />
   </head>
   <body>
     <div class="shell">
@@ -284,6 +284,28 @@
         </section>
 
         <section class="page" data-content="settings">
+          <section class="panel ai-provider-panel" id="aiProviderPanel" hidden>
+            <div class="panel-head">
+              <div>
+                <h2>AI 供應商與用量</h2>
+                <p>Gemini 為主要供應商；失敗時自動改用 OpenAI。系統只記錄 token、延遲與狀態，不保存提示內容或圖片。</p>
+              </div>
+              <button id="refreshAIUsage" class="secondary" type="button">重新整理</button>
+            </div>
+            <div class="ai-provider-grid">
+              <article><small>主要供應商</small><strong>Gemini</strong><span id="geminiKeyStatus" class="api-key-status">讀取中…</span><button id="testGeminiKey" class="secondary" type="button">測試 Gemini</button></article>
+              <article><small>備援供應商</small><strong>OpenAI</strong><span id="aiOpenAIStatus" class="api-key-status">讀取中…</span></article>
+            </div>
+            <div class="ai-usage-summary">
+              <div><small>AI 請求</small><strong id="aiLogicalRequests">0</strong></div>
+              <div><small>Gemini 用量</small><strong id="aiGeminiTokens">0</strong></div>
+              <div><small>OpenAI 用量</small><strong id="aiOpenAITokens">0</strong></div>
+              <div><small>備援次數</small><strong id="aiFallbackAttempts">0</strong></div>
+              <div><small>平均延遲</small><strong id="aiAverageLatency">0 ms</strong></div>
+            </div>
+            <div class="ai-usage-table-wrap"><table class="ai-usage-table"><thead><tr><th>時間</th><th>功能</th><th>供應商</th><th>模型</th><th>狀態</th><th>Token</th><th>延遲</th></tr></thead><tbody id="aiUsageRows"><tr><td colspan="7">尚無資料</td></tr></tbody></table></div>
+            <p class="api-key-note">GEMINI_API_KEY 必須使用 Wrangler Secret 設定，不會顯示或儲存在後台。OpenAI 沿用既有加密設定或 Worker Secret。</p>
+          </section>
           <section class="panel openai-settings-panel" id="openAISettingsPanel" hidden>
             <div class="panel-head">
               <div>
@@ -325,6 +347,6 @@
       </section>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <script type="module" src="/admin.js?v=20260731-15"></script>
+    <script type="module" src="/admin.js?v=20260813-1"></script>
   </body>
 </html>

@@ -12,7 +12,9 @@
     "LIFF_ID": "2010925044-KXzQzB5r",
     "CARD_SHARE_LIFF_ID": "2010925044-hPtKkoKO",
     "CHECKIN_LIFF_ID": "2010925044-KXzQzB5r",
-    "LINE_LOGIN_CHANNEL_ID": "2007221311"
+    "LINE_LOGIN_CHANNEL_ID": "2007221311",
+    "GEMINI_MODEL": "gemini-3.5-flash-lite",
+    "OPENAI_FALLBACK_MODEL": "gpt-5-mini"
   },
   "d1_databases": [
     {

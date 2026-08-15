@@ -5,15 +5,16 @@ import worker from "../src/index.js";
 
 const source = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 
-test("exclusive share URL stays on A-kaffit and does not use the shared aiweb LIFF", () => {
+test("exclusive share URL uses this project's LIFF entry", () => {
   const start = source.indexOf('url.pathname === "/v1/invite-links"');
   const end = source.indexOf('url.pathname.startsWith("/i/")', start);
   const inviteRoute = source.slice(start, end);
 
-  assert.match(inviteRoute, /const shareUrl/);
-  assert.match(inviteRoute, /url\.origin/);
+  assert.match(inviteRoute, /const shareUrl = env\.LIFF_ID/);
+  assert.match(inviteRoute, /https:\/\/liff\.line\.me/);
+  assert.match(inviteRoute, /encodeURIComponent\(env\.LIFF_ID\)/);
   assert.match(inviteRoute, /encodeURIComponent\(invite\.token\)/);
-  assert.doesNotMatch(inviteRoute, /liff\.line\.me|env\.LIFF_ID/);
+  assert.match(inviteRoute, /url\.origin/);
 });
 
 test("permanent invite entry redirects to the A-kaffit homepage with the referral token", async () => {

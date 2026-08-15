@@ -2,6 +2,7 @@ import { newId } from './member-repository.js';
 import { sha256 } from './auth.js';
 import { memberMatchFromVersions } from './member-match-ranking.js';
 import { aiCardCrmFromVersions } from './ai-card-crm.js';
+import { resolveCardImageJobFile } from './card-image-processing.js';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -494,7 +495,7 @@ export async function reverifyContactFromSource(db,bucket,userId,id,apiKey,model
     FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
     WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active' AND cie.front_r2_key!=''`).bind(id,userId).first();
   if(!row)throw new Error('這張名片沒有可供重新辨識的原始圖片');
-  await db.prepare("UPDATE card_import_events SET status='verification_processing',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.source_event_id).run();
+  await db.prepare("UPDATE card_import_events SET status='processing',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.source_event_id).run();
   try{
     const images=[];
     for(const key of [row.import_front_key,row.import_back_key].filter(Boolean)){
@@ -512,7 +513,7 @@ export async function reverifyContactFromSource(db,bucket,userId,id,apiKey,model
     versions._aiCrm={...(versions._aiCrm || {}),status:'queued',analysisVersion:'',error:'',updatedAt:new Date().toISOString()};
     await db.batch([
       db.prepare('UPDATE contact_cards SET display_name=?,english_name=?,company_name=?,job_title=?,department=?,mobile=?,company_phone=?,email=?,website_url=?,line_url=?,address=?,service_description=?,note=?,normalized_mobile=?,normalized_email=?,normalized_name_company=?,versions_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND scanner_user_id=?').bind(...values,JSON.stringify(versions),id,userId),
-      db.prepare("UPDATE card_import_events SET status='created',ocr_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify(verified),row.source_event_id),
+      db.prepare("UPDATE card_import_events SET status='created',ocr_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(JSON.stringify({...verified,...(original._manualCrop ? {_manualCrop:original._manualCrop} : {})}),row.source_event_id),
     ]);
     return rowToCard(await db.prepare('SELECT * FROM contact_cards WHERE id=? AND scanner_user_id=?').bind(id,userId).first());
   }catch(error){
@@ -524,7 +525,7 @@ export async function queueContactCardReverification(db,userId,id) {
   const row=await db.prepare(`SELECT cc.id FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
     WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active' AND cie.front_r2_key!=''`).bind(id,userId).first();
   if(!row)return false;
-  await db.prepare("UPDATE card_import_events SET status='verification_queued',updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?").bind(id).run();
+  await db.prepare("UPDATE card_import_events SET status='received',updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?").bind(id).run();
   return true;
 }
 export async function queueMemberCardVerificationBackfill(db,userId,limit=1) {
@@ -533,10 +534,10 @@ export async function queueMemberCardVerificationBackfill(db,userId,limit=1) {
     FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
     WHERE cc.scanner_user_id=? AND cc.status='active' AND cie.front_r2_key!=''
       AND COALESCE(json_extract(cie.ocr_json,'$.verificationVersion'),'')!=?
-      AND cie.status NOT IN ('verification_queued','verification_processing')
+      AND cie.status NOT IN ('received','processing')
     ORDER BY cie.updated_at ASC LIMIT ?`).bind(userId,OCR_VERIFICATION_VERSION,capped).all();
   const rows=result.results || [];
-  if(rows.length)await db.batch(rows.map((row)=>db.prepare("UPDATE card_import_events SET status='verification_queued',updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?").bind(row.id)));
+  if(rows.length)await db.batch(rows.map((row)=>db.prepare("UPDATE card_import_events SET status='received',updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?").bind(row.id)));
   return rows.map((row)=>({id:row.id,userId:row.scanner_user_id}));
 }
 export async function queueLegacyFailedImportRetries(db, limit = 3) {
@@ -666,7 +667,15 @@ async function updateCardImportFingerprint(db,eventId,status) {
 }
 
 export async function createImport(db, bucket, userId, form, options = {}) {
-  const files = ['front','back'].map((key)=>form.get(key)).filter((file)=>file instanceof File && file.size);
+  const files = [];
+  for (const key of ['front','back']) {
+    const jobId = text(form.get(key + 'JobId'), 120);
+    const uploaded = form.get(key);
+    const file = jobId
+      ? await resolveCardImageJobFile(db, bucket, userId, jobId)
+      : uploaded instanceof File && uploaded.size ? uploaded : null;
+    if (file) files.push(file);
+  }
   if (!files.length || files.length > 2) throw new Error('請選擇名片正面，最多可加一張背面');
   for (const file of files) {
     if (!ALLOWED_IMAGE_TYPES.has(file.type)) throw new Error('名片圖片僅支援 JPEG、PNG 或 WebP');
@@ -804,6 +813,41 @@ export async function deleteContact(db,bucket,userId,id) { const row=await db.pr
 
 export async function serveContactImage(db,bucket,request,userId,id) { const row=await db.prepare("SELECT front_r2_key,front_content_type FROM contact_cards WHERE id=? AND scanner_user_id=? AND status='active'").bind(id,userId).first(); if(!row?.front_r2_key)return new Response('Not found',{status:404}); const object=await bucket.get(row.front_r2_key); if(!object)return new Response('Not found',{status:404}); return new Response(request.method==='HEAD'?null:object.body,{headers:{'content-type':object.httpMetadata?.contentType||row.front_content_type||'image/webp','cache-control':'private, max-age=300','x-content-type-options':'nosniff'}}); }
 
+export async function serveContactOriginalImage(db,bucket,request,userId,id) {
+  const row=await db.prepare(`SELECT cie.front_r2_key,cie.front_content_type,cie.ocr_json
+    FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
+    WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active'`).bind(id,userId).first();
+  if(!row?.front_r2_key)return new Response('Not found',{status:404});
+  let metadata={};try{metadata=JSON.parse(row.ocr_json || '{}');}catch{}
+  const key=text(metadata?._manualCrop?.originalR2Key,500) || row.front_r2_key;
+  const object=await bucket.get(key);
+  if(!object)return new Response('Not found',{status:404});
+  return new Response(request.method==='HEAD'?null:object.body,{headers:{'content-type':object.httpMetadata?.contentType||row.front_content_type||'image/webp','cache-control':'private, no-store','x-content-type-options':'nosniff'}});
+}
+
+export async function saveContactManualCrop(db,bucket,userId,id,file) {
+  if(!(file instanceof File) || !file.size)throw new Error('請先完成名片裁切');
+  if(!ALLOWED_IMAGE_TYPES.has(file.type))throw new Error('裁切圖片僅支援 JPEG、PNG 或 WebP');
+  if(file.size>MAX_IMAGE_BYTES)throw new Error('裁切後圖片須小於 2MB');
+  const row=await db.prepare(`SELECT cc.id,cc.source_event_id,cie.front_r2_key,cie.front_content_type,cie.ocr_json
+    FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
+    WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active'`).bind(id,userId).first();
+  if(!row?.source_event_id || !row.front_r2_key)throw new Error('這張名片沒有可供手動裁切的原始圖片');
+  let ocr={};try{ocr=JSON.parse(row.ocr_json || '{}');}catch{}
+  const originalR2Key=text(ocr?._manualCrop?.originalR2Key,500) || row.front_r2_key;
+  const previousCropKey=row.front_r2_key;
+  const croppedKey=`card-collections/${userId}/${row.source_event_id}/manual-${newId('crop')}.webp`;
+  await bucket.put(croppedKey,await file.arrayBuffer(),{httpMetadata:{contentType:file.type}});
+  const manualCrop={originalR2Key,currentR2Key:croppedKey,updatedAt:new Date().toISOString()};
+  try{
+    await db.batch([
+      db.prepare("UPDATE card_import_events SET front_r2_key=?,front_content_type=?,status='received',ocr_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND scanner_user_id=?").bind(croppedKey,file.type,JSON.stringify({...ocr,_manualCrop:manualCrop}),row.source_event_id,userId),
+      db.prepare("UPDATE contact_cards SET front_r2_key=?,front_content_type=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND scanner_user_id=?").bind(croppedKey,file.type,id,userId),
+    ]);
+  }catch(error){await bucket.delete(croppedKey).catch(()=>null);throw error;}
+  if(previousCropKey!==originalR2Key && previousCropKey!==croppedKey)await bucket.delete(previousCropKey).catch(()=>null);
+  return {id,eventId:row.source_event_id,manualCrop:true};
+}
 export async function collectPublicCard(db,userId,personalCardId) {
   const source=await db.prepare("SELECT * FROM personal_cards WHERE id=? AND status='published'").bind(personalCardId).first(); if(!source)throw new Error('名片不存在或尚未公開'); if(source.platform_user_id===userId){const error=new Error('這是你自己的名片');error.code='self_card';throw error;}
   const existing=await db.prepare("SELECT * FROM contact_cards WHERE scanner_user_id=? AND source_personal_card_id=? AND status='active'").bind(userId,personalCardId).first(); if(existing)return {card:rowToCard(existing),duplicate:true};

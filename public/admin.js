@@ -65,6 +65,8 @@ async function overview() {
     if (pointNav) pointNav.hidden = !adminAccess?.canManagePoints;
     const richMenuNav = document.querySelector('[data-page="richmenu"]');
     if (richMenuNav) richMenuNav.hidden = !adminAccess?.canManageRichMenu;
+    const aiProviderPanel = $("#aiProviderPanel");
+    if (aiProviderPanel) aiProviderPanel.hidden = !adminAccess?.systemAccess;
     const openAISettings = $("#openAISettingsPanel");
     if (openAISettings) openAISettings.hidden = !adminAccess?.systemAccess;
     const x = data.overview;
@@ -111,9 +113,26 @@ function switchPage(page) {
   if (page === "courses") loadCourses();
   if (page === "calendar") loadCalendar();
   if (page === "richmenu") loadRichMenuToken();
-  if (page === "settings" && adminAccess?.systemAccess) loadOpenAISettings();
+  if (page === "settings" && adminAccess?.systemAccess) { loadOpenAISettings(); loadAIProviderUsage(); }
 }
 
+function renderAIProviderStatus(data) {
+  const gemini=$("#geminiKeyStatus"),openai=$("#aiOpenAIStatus");
+  if(gemini){gemini.textContent=data?.gemini?.configured?("已設定 · "+(data.gemini.model||"")):"尚未設定 GEMINI_API_KEY";gemini.classList.toggle("configured",Boolean(data?.gemini?.configured));}
+  if(openai){openai.textContent=data?.openai?.configured?("已設定 · "+(data.openai.source==="database"?"後台加密":"Worker Secret")):"尚未設定";openai.classList.toggle("configured",Boolean(data?.openai?.configured));}
+}
+function renderAIUsage(data) {
+  const summary=data?.summary||{},providers=Object.fromEntries((data?.byProvider||[]).map((row)=>[row.provider,row]));
+  $("#aiLogicalRequests").textContent=format(summary.logical_requests||0);
+  $("#aiGeminiTokens").textContent=format(providers.gemini?.total_tokens||0);
+  $("#aiOpenAITokens").textContent=format(providers.openai?.total_tokens||0);
+  $("#aiFallbackAttempts").textContent=format(summary.fallback_attempts||0);
+  $("#aiAverageLatency").textContent=format(summary.average_latency_ms||0)+" ms";
+  const rows=$("#aiUsageRows"); if(!rows)return;
+  rows.innerHTML=(data?.events||[]).length?(data.events||[]).map((row)=>"<tr><td>"+esc(String(row.created_at||"").replace("T"," ").slice(0,19))+"</td><td>"+esc(row.feature)+"</td><td><b>"+esc(row.provider)+"</b>"+(row.is_fallback?"<small>備援</small>":"")+"</td><td>"+esc(row.model)+"</td><td><span class=\"ai-usage-state "+esc(row.status)+"\">"+esc(row.status)+"</span></td><td>"+format(row.total_tokens||0)+"</td><td>"+format(row.latency_ms||0)+" ms</td></tr>").join(""):'<tr><td colspan="7">尚無 AI 用量紀錄</td></tr>';
+}
+async function loadAIProviderUsage(){try{const [providers,usage]=await Promise.all([api("/v1/admin/ai-providers"),api("/v1/admin/ai-usage?limit=50")]);renderAIProviderStatus(providers);renderAIUsage(usage)}catch(error){showStatus(error.message,"error")}}
+async function testGeminiSetting(button){try{await withButtonFeedback(button,async()=>{const result=await api("/v1/admin/ai-providers/gemini/test",{});showStatus("Gemini 連線正常 · "+result.model);await loadAIProviderUsage()},{busy:"測試中…",success:"連線正常"})}catch(error){showStatus(error.message,"error")}}
 function renderOpenAIStatus(data) {
   const status=$("#openAIKeyStatus"); if(!status)return;
   const source=data?.source==="database"?"後台加密儲存":data?.source==="environment"?"Worker 環境密鑰":"尚未設定";
@@ -335,6 +354,8 @@ $("#adminCardType")?.addEventListener("change",renderAdminCards);
 $("#adminCardOwner")?.addEventListener("change",renderAdminCards);
 $("#saveRichMenuToken")?.addEventListener("click", event => saveRichMenuToken(event.currentTarget));
 $("#testRichMenuToken")?.addEventListener("click", event => testRichMenuToken(event.currentTarget));
+$("#refreshAIUsage")?.addEventListener("click",event=>withButtonFeedback(event.currentTarget,loadAIProviderUsage,{busy:"讀取中…",success:"已更新"}));
+$("#testGeminiKey")?.addEventListener("click",event=>testGeminiSetting(event.currentTarget));
 $("#saveOpenAIKey")?.addEventListener("click",event=>saveOpenAISetting(event.currentTarget));
 $("#testOpenAIKey")?.addEventListener("click",event=>testOpenAISetting(event.currentTarget));
 $("#deleteOpenAIKey")?.addEventListener("click",event=>removeOpenAISetting(event.currentTarget));

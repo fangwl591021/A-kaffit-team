@@ -2049,8 +2049,8 @@ async function uploadCardImageOriginal(file, sideLabel, purpose) {
   const body=await response.json();if(!response.ok)throw new Error(body.error||"名片原圖上傳失敗");return body.job;
 }
 
-async function saveCardImageProcessingResult(jobId, file, metadata, status = "completed") {
-  const form=new FormData();form.append("image",file);form.append("metadata",JSON.stringify(metadata));form.append("status",status);
+async function saveCardImageProcessingResult(jobId, file, metadata) {
+  const form=new FormData();form.append("image",file);form.append("metadata",JSON.stringify(metadata));form.append("status","completed");
   const response=await fetch("/v1/card-images/" + encodeURIComponent(jobId) + "/result",{method:"POST",headers:{authorization:"Bearer " + state.token},body:form});
   const body=await response.json();if(!response.ok)throw new Error(body.error||"名片影像處理結果儲存失敗");return body.job;
 }
@@ -2059,13 +2059,12 @@ async function prepareBusinessCardImage(file, sideLabel, purpose) {
   const job=await uploadCardImageOriginal(file,sideLabel,purpose);
   let result=await processBusinessCardImage(file);let processed=result.file;let metadata=result.metadata || {};
   const confidence=Number(metadata.detection?.confidence||0),quality=Number(metadata.quality?.overall||0);
-  const needsReview=!processed||confidence<CARD_IMAGE_THRESHOLDS.confidence||quality<CARD_IMAGE_THRESHOLDS.quality;
-  if(needsReview){
-    processed=file;
-    metadata={...metadata,processing:{...(metadata.processing||{}),perspectiveCorrected:false,cropped:false,manualCorrection:false},warning:"自動裁切信心不足，已保留完整原圖進行辨識；如結果不理想，可在名片結果頁手動裁切並重新辨識"};
+  if(!processed||confidence<CARD_IMAGE_THRESHOLDS.confidence||quality<CARD_IMAGE_THRESHOLDS.quality){
+    processed=await cropCollectionScanImage(file,sideLabel);if(!processed)return null;
+    metadata={...metadata,processing:{...(metadata.processing||{}),perspectiveCorrected:false,cropped:true,manualCorrection:true},warning:"自動偵測信心不足，已由使用者手動校正"};
   }
   processed=await compressCardImage(processed);
-  await saveCardImageProcessingResult(job.id,processed,metadata,needsReview?"needs_review":"completed");
+  await saveCardImageProcessingResult(job.id,processed,metadata);
   return {file:processed,jobId:job.id,metadata};
 }
 async function prepareCardLiff() {
