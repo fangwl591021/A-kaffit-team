@@ -46,8 +46,8 @@ export function finalOutputSize(cardWidth,cardHeight){
   const target=landscape?CARD_SCANNER_RESOLUTION.targetLandscape:CARD_SCANNER_RESOLUTION.targetPortrait;
   const sourceLong=Math.max(width,height),targetLong=Math.max(target.width,target.height);
   if(sourceLong>=targetLong)return {...target,upscaled:false};
-  const scale=targetLong/sourceLong;
-  return {width:Math.max(1,Math.round(target.width/scale)),height:Math.max(1,Math.round(target.height/scale)),upscaled:false};
+  const ratio=sourceLong/targetLong;
+  return {width:Math.max(1,Math.round(target.width*ratio)),height:Math.max(1,Math.round(target.height*ratio)),upscaled:false};
 }
 
 export async function imageBitmapFromFile(file){
@@ -69,14 +69,32 @@ function drawScaled(source,width,height){
   return canvas;
 }
 
-export async function normalizeCardSource(file,options={}){
+export async function normalizeWorkingSource(file,{workingLongEdge=CARD_SCANNER_RESOLUTION.workingLongEdge}={}){
   const source=await imageBitmapFromFile(file);
-  const width=source.naturalWidth||source.width,height=source.naturalHeight||source.height;
-  const plan=resolutionPlan(width,height,options);
-  const workingCanvas=drawScaled(source,plan.working.width,plan.working.height);
-  const analysisCanvas=drawScaled(workingCanvas,plan.analysis.width,plan.analysis.height);
-  if(typeof source.close==='function')source.close();
-  return {plan,workingCanvas,analysisCanvas};
+  try{
+    const width=source.naturalWidth||source.width,height=source.naturalHeight||source.height;
+    const input={width:Math.max(1,Math.round(width)),height:Math.max(1,Math.round(height))};
+    const working=fitInside(input.width,input.height,workingLongEdge);
+    const workingCanvas=drawScaled(source,working.width,working.height);
+    return {input,working:{width:working.width,height:working.height,scaleFromInput:working.scale},workingCanvas};
+  }finally{
+    if(typeof source.close==='function')source.close();
+  }
+}
+
+export async function normalizeCardSource(file,options={}){
+  const base=await normalizeWorkingSource(file,options);
+  const analysis=fitInside(base.working.width,base.working.height,options.analysisLongEdge||CARD_SCANNER_RESOLUTION.analysisLongEdge);
+  const analysisCanvas=drawScaled(base.workingCanvas,analysis.width,analysis.height);
+  return {
+    plan:{
+      input:base.input,
+      working:base.working,
+      analysis:{width:analysis.width,height:analysis.height,scaleFromWorking:analysis.scale,scaleFromInput:base.working.scaleFromInput*analysis.scale},
+    },
+    workingCanvas:base.workingCanvas,
+    analysisCanvas,
+  };
 }
 
 export function releaseNormalizedSource(value={}){
