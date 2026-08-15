@@ -71,6 +71,7 @@ function gentleEnhance(canvas){
 function normalizedCorners(points,width,height){
   return points.map((point)=>({x:clamp(point.x/width,0,1),y:clamp(point.y/height,0,1)}));
 }
+function releaseCanvas(canvas){if(canvas){canvas.width=1;canvas.height=1;}}
 
 export async function processBusinessCardImage(file){
   if(!(file instanceof Blob)||!file.size)throw new Error('找不到名片圖片');
@@ -78,45 +79,52 @@ export async function processBusinessCardImage(file){
     workingLongEdge:CARD_SCANNER_RESOLUTION.workingLongEdge,
     analysisLongEdge:CARD_SCANNER_RESOLUTION.analysisLongEdge,
   });
-  const analysisContext=analysisCanvas.getContext('2d',{willReadFrequently:true});
-  const analysisImage=analysisContext.getImageData(0,0,analysisCanvas.width,analysisCanvas.height);
-  const quality=assessQuality(analysisImage),found=detectCardQuad(analysisImage);
-  const baseMetadata={
-    original:{width:plan.input.width,height:plan.input.height},
-    working:{width:plan.working.width,height:plan.working.height},
-    analysis:{width:plan.analysis.width,height:plan.analysis.height},
-    detection:{detected:Boolean(found),confidence:Number(found?.confidence||0)},
-    card:{orientation:'',rotation:0},quality,
-    processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},
-    corners:found?normalizedCorners(found.points,analysisCanvas.width,analysisCanvas.height):[],warning:'',
-  };
-  if(!found)return {file:null,metadata:{...baseMetadata,warning:'未能可靠找到名片四邊，請手動裁切；不會呼叫 AI 進行裁切。'}};
+  let warped=null;
+  try{
+    const analysisContext=analysisCanvas.getContext('2d',{willReadFrequently:true});
+    const analysisImage=analysisContext.getImageData(0,0,analysisCanvas.width,analysisCanvas.height);
+    const quality=assessQuality(analysisImage),found=detectCardQuad(analysisImage);
+    const baseMetadata={
+      original:{width:plan.input.width,height:plan.input.height},
+      working:{width:plan.working.width,height:plan.working.height},
+      analysis:{width:plan.analysis.width,height:plan.analysis.height},
+      detection:{detected:Boolean(found),confidence:Number(found?.confidence||0)},
+      card:{orientation:'',rotation:0},quality,
+      processing:{perspectiveCorrected:false,cropped:false,rotated:false,lightingEnhanced:false,manualCorrection:false,resolutionNormalized:true},
+      corners:found?normalizedCorners(found.points,analysisCanvas.width,analysisCanvas.height):[],warning:'',
+    };
+    if(!found)return {file:null,metadata:{...baseMetadata,warning:'未能可靠找到名片四邊，請手動裁切；不會呼叫 AI 進行裁切。'}};
 
-  const completeness=assessCardCompleteness(found.points,analysisCanvas.width,analysisCanvas.height);
-  if(completeness.boundaryTouch||completeness.score<CARD_IMAGE_THRESHOLDS.completeness){
-    return {file:null,metadata:{...baseMetadata,detection:{detected:true,confidence:Math.min(found.confidence,.69)},warning:'名片可能未完整入鏡或貼近照片邊界，請稍微拉遠後重新拍攝。'}};
+    const completeness=assessCardCompleteness(found.points,analysisCanvas.width,analysisCanvas.height);
+    if(completeness.boundaryTouch||completeness.score<CARD_IMAGE_THRESHOLDS.completeness){
+      return {file:null,metadata:{...baseMetadata,detection:{detected:true,confidence:Math.min(found.confidence,.69)},warning:'名片可能未完整入鏡或貼近照片邊界，請稍微拉遠後重新拍攝。'}};
+    }
+    if(found.confidence<CARD_IMAGE_THRESHOLDS.confidence){
+      return {file:null,metadata:{...baseMetadata,warning:'已找到可能的名片邊界，但信心不足；請確認或手動裁切。'}};
+    }
+
+    const analysisExpanded=expandCardQuad(found.points,analysisCanvas.width,analysisCanvas.height);
+    const workingPoints=orderQuad(analysisPointsToWorking(analysisExpanded,plan));
+    const widthEstimate=(distance(workingPoints[0],workingPoints[1])+distance(workingPoints[3],workingPoints[2]))/2;
+    const heightEstimate=(distance(workingPoints[0],workingPoints[3])+distance(workingPoints[1],workingPoints[2]))/2;
+    const outputSize=finalOutputSize(widthEstimate,heightEstimate);
+    warped=warpPerspective(workingCanvas,workingPoints,outputSize.width,outputSize.height);
+    if(!warped)return {file:null,metadata:{...baseMetadata,warning:'透視補正失敗，請改用手動裁切。'}};
+
+    gentleEnhance(warped);
+    const output=await canvasToCardFile(warped,'business-card-auto.webp',CARD_SCANNER_RESOLUTION.outputQuality);
+    const landscape=outputSize.width>=outputSize.height;
+    return {file:output,metadata:{
+      ...baseMetadata,
+      detection:{detected:true,confidence:found.confidence},
+      card:{orientation:landscape?'landscape':'portrait',rotation:0},
+      quality:{...quality,coverage:Math.round(found.coverage*100)},
+      processing:{perspectiveCorrected:true,cropped:true,rotated:false,lightingEnhanced:true,manualCorrection:false,resolutionNormalized:true},
+      corners:normalizedCorners(found.points,analysisCanvas.width,analysisCanvas.height),warning:'',
+    }};
+  }finally{
+    releaseCanvas(warped);
+    releaseCanvas(analysisCanvas);
+    releaseCanvas(workingCanvas);
   }
-  if(found.confidence<CARD_IMAGE_THRESHOLDS.confidence){
-    return {file:null,metadata:{...baseMetadata,warning:'已找到可能的名片邊界，但信心不足；請確認或手動裁切。'}};
-  }
-
-  const analysisExpanded=expandCardQuad(found.points,analysisCanvas.width,analysisCanvas.height);
-  const workingPoints=orderQuad(analysisPointsToWorking(analysisExpanded,plan));
-  const widthEstimate=(distance(workingPoints[0],workingPoints[1])+distance(workingPoints[3],workingPoints[2]))/2;
-  const heightEstimate=(distance(workingPoints[0],workingPoints[3])+distance(workingPoints[1],workingPoints[2]))/2;
-  const outputSize=finalOutputSize(widthEstimate,heightEstimate);
-  const warped=warpPerspective(workingCanvas,workingPoints,outputSize.width,outputSize.height);
-  if(!warped)return {file:null,metadata:{...baseMetadata,warning:'透視補正失敗，請改用手動裁切。'}};
-
-  gentleEnhance(warped);
-  const output=await canvasToCardFile(warped,'business-card-auto.webp',CARD_SCANNER_RESOLUTION.outputQuality);
-  const landscape=outputSize.width>=outputSize.height;
-  return {file:output,metadata:{
-    ...baseMetadata,
-    detection:{detected:true,confidence:found.confidence},
-    card:{orientation:landscape?'landscape':'portrait',rotation:0},
-    quality:{...quality,coverage:Math.round(found.coverage*100)},
-    processing:{perspectiveCorrected:true,cropped:true,rotated:false,lightingEnhanced:true,manualCorrection:false,resolutionNormalized:true},
-    corners:normalizedCorners(found.points,analysisCanvas.width,analysisCanvas.height),warning:'',
-  }};
 }
