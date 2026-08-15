@@ -7,6 +7,8 @@ on:
     paths:
       - scripts/apply-card-vision-localization-v3.mjs
       - scripts/fix-card-vision-localization-v3.mjs
+      - scripts/apply-card-vision-v3-stability.mjs
+      - test/card-vision-v3-stability.test.js
       - .github/workflows/apply-card-vision-localization-v3.yml
 
 permissions:
@@ -27,6 +29,7 @@ jobs:
         run: |
           node scripts/apply-card-vision-localization-v3.mjs
           node scripts/fix-card-vision-localization-v3.mjs
+          node scripts/apply-card-vision-v3-stability.mjs
       - name: Install dependencies
         run: npm ci
       - name: Test
@@ -64,8 +67,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/card-collection.js src/index.js public/app.js public/app-20260815-132.js \
-            test/card-vision-localization-v3.test.js test/business-card-verification.test.js \
+            test/card-vision-localization-v3.test.js test/card-vision-v3-stability.test.js test/business-card-verification.test.js \
             test/card-image-smart.test.js test/card-scanner-v2-integration.test.js \
             test/card-scanner-v2-lab.test.js test/card-scanner-v2.test.js test/personal-card-scan.test.js
-          git commit -m "feat: use one-pass Vision OCR and card localization"
+          git commit -m "fix: harden Vision V3 card crop stability"
           git push origin HEAD:agent/card-scanner-v2
