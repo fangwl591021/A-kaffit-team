@@ -44,11 +44,10 @@ export function analysisPointsToWorking(points,plan){
 export function finalOutputSize(cardWidth,cardHeight){
   const width=Math.max(1,Number(cardWidth)||1),height=Math.max(1,Number(cardHeight)||1),landscape=width>=height;
   const target=landscape?CARD_SCANNER_RESOLUTION.targetLandscape:CARD_SCANNER_RESOLUTION.targetPortrait;
-  // Do not upscale a small crop beyond its native long edge. This avoids inventing detail.
   const sourceLong=Math.max(width,height),targetLong=Math.max(target.width,target.height);
   if(sourceLong>=targetLong)return {...target,upscaled:false};
-  const fitted=fitInside(width,height,sourceLong);
-  return {width:fitted.width,height:fitted.height,upscaled:false};
+  const scale=targetLong/sourceLong;
+  return {width:Math.max(1,Math.round(target.width/scale)),height:Math.max(1,Math.round(target.height/scale)),upscaled:false};
 }
 
 export async function imageBitmapFromFile(file){
@@ -78,6 +77,12 @@ export async function normalizeCardSource(file,options={}){
   const analysisCanvas=drawScaled(workingCanvas,plan.analysis.width,plan.analysis.height);
   if(typeof source.close==='function')source.close();
   return {plan,workingCanvas,analysisCanvas};
+}
+
+export function releaseNormalizedSource(value={}){
+  for(const canvas of [value.analysisCanvas,value.workingCanvas]){
+    if(canvas){canvas.width=1;canvas.height=1;}
+  }
 }
 
 export async function canvasToCardFile(canvas,name='business-card.webp',quality=CARD_SCANNER_RESOLUTION.outputQuality){
